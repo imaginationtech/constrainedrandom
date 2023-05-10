@@ -231,10 +231,14 @@ class MultiVarProblem:
             attempts = 0
             while True:
                 if attempts >= max_iterations:
+                    # We have failed, give up
                     return None
                 for var in rand_vars:
                     # Add random variables in with a concrete value
-                    problem.addVariable(var.name, (var.randomize(),))
+                    var_domain = set()
+                    for _ in range(solutions_per_group):
+                        var_domain.add(var.randomize())
+                    problem.addVariable(var.name, list(var_domain))
                 solutions = problem.getSolutions()
                 if len(solutions) > 0:
                     break
