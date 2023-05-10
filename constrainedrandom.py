@@ -23,7 +23,7 @@ import random
 # The maximum iterations before giving up on any randomisation
 MAX_ITERATIONS = 100
 # The largest domain size to use with the constraint library
-CONSTRAINT_MAX_DOMAIN_SIZE = 1 << 9
+CONSTRAINT_MAX_DOMAIN_SIZE = 1 << 10
 
 
 class Random(random.Random):
@@ -151,7 +151,7 @@ class MultiVarProblem:
         # Currently this is just a flat list. Group into as large groups as possible.
         result = [[sorted_vars[0]]]
         index = 0
-        domain_size = len(sorted_vars[0].domain)
+        domain_size = len(sorted_vars[0].domain) if sorted_vars[0].domain is not None else 1
         for var in sorted_vars[1:]:
             if var.domain is not None:
                 domain_size = domain_size * len(var.domain)
@@ -161,19 +161,22 @@ class MultiVarProblem:
             else:
                 # Make a new group
                 index += 1
-                domain_size = len(var.domain)
+                domain_size = len(var.domain) if var.domain is not None else 1
                 result.append([var])
 
         return result
 
-    def _solve(self, groups, solutions_per_group=None):
+    def _solve(self, groups, max_iterations, solutions_per_group=None):
         '''
         Constraint solving algorithm (internally used by MultiVarProblem).
 
         If solutions_per_group is not None, solve one constraint group problem 'sparsely',
         i.e. keep only a subset of potential solutions between groups.
         Fast but prone to failure.
-        
+        solutions_per_group = 1 is effectively a depth-first search through the state space
+        and comes with greater benefits of considering each multi-variable constraint at
+        most once.
+
         If solutions_per_group is None, Solve constraint problem 'thoroughly',
         i.e. keep all possible results between iterations.
         Slow, but will usually converge.
@@ -192,23 +195,26 @@ class MultiVarProblem:
             # Construct a constraint problem where possible. A variable must have a domain
             # in order to be part of the problem. If it doesn't have one, it must just be
             # randomized.
-            group_vars = []
-            rand_vars = []
-            skipped_constraints = []
             if sparse_solver:
                 # Construct one problem per iteration, add solved variables from previous groups
                 problem = constraint.Problem()
                 for name, values in solved_vars.items():
                     problem.addVariable(name, list(values))
+            group_vars = []
+            rand_vars = []
             for var in group:
                 group_vars.append(var.name)
                 if var.domain is not None and not isinstance(var.domain, dict):
                     problem.addVariable(var.name, var.domain)
+                    # If variable has its own constraints, these must be added to the problem,
+                    # regardless of whether var.check_constraints is true, as the var's value will
+                    # depend on the value of the other constrained variables in the problem.
                     for con in var.constraints:
                         problem.addConstraint(con, (var.name,))
                 else:
                     rand_vars.append(var)
             # Add all pertinent constraints
+            skipped_constraints = []
             for (con, vars) in constraints:
                 skip = False
                 for var in vars:
@@ -224,8 +230,8 @@ class MultiVarProblem:
             solutions = []
             attempts = 0
             while True:
-                if attempts >= self.max_iterations:
-                    raise RuntimeError("Exceeded max iterations, problem could not be solved")
+                if attempts >= max_iterations:
+                    return None
                 for var in rand_vars:
                     # Add random variables in with a concrete value
                     problem.addVariable(var.name, (var.randomize(),))
@@ -245,12 +251,16 @@ class MultiVarProblem:
                         solution_subset = self.random.choices(solutions, k=solutions_per_group)
                     else:
                         solution_subset = solutions
+                    solved_vars = defaultdict(set)
                     for soln in solution_subset:
                         for name, value in soln.items():
                             solved_vars[name].add(value)
+                if solutions_per_group == 1:
+                    # This means we have exactly one solution for the variables considered so far,
+                    # meaning we don't need to re-apply solved constraints for future groups.
+                    constraints = skipped_constraints
             else:
                 solved_vars += group_vars
-            constraints = skipped_constraints
 
         return self.random.choice(solutions)
 
@@ -258,25 +268,23 @@ class MultiVarProblem:
         '''
         Attempt to solve the variables with respect to the constraints.
         '''
-
         groups = self.determine_order()
 
         solution = None
 
         # Try to solve sparsely first
-        sparsities = [10, 100, 1000]
+        sparsities = [1, 10, 100, 1000]
         for sparsity in sparsities:
-            try:
-                solution = self._solve(groups, sparsity)
-                break
-            except RuntimeError:
-                continue
+            for _ in range(self.max_iterations // 10):
+                solution = self._solve(groups, self.max_iterations // 10, sparsity)
+                if solution is not None and len(solution) > 0:
+                    return solution
 
-        if solution is not None:
-            return solution
-        
         # Try 'thorough' method - no backup plan if this fails
-        return self._solve(groups)
+        solution = self._solve(groups)
+        if solution is None:
+            raise RuntimeError("Could not solve problem.")
+        return solution
 
 
 class RandObj:

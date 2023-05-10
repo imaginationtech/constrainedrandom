@@ -41,15 +41,19 @@ class RandObjTests(unittest.TestCase):
         def not_3(foo):
             return foo != 3
         r.add_rand_var("dan", domain=range(5), constraints=not_3)
+        def custom_fn(arg):
+            return arg + 1
+        r.add_rand_var("joe", fn=custom_fn, args=(1,))
         def check(results):
             for result in results:
-                check = True
-                check &= 0 <= result['foo'] < 100
-                check &= result['bar'] in (1,2,3,)
-                check &= 0 <= result['baz'] < (1 << 4)
-                check &= result['bob'] in (0,1)
-                check &= result['dan'] in (0,1,2,4)
-                self.assertTrue(check, f"Check failed on {result=}")
+                self.assertLessEqual(0, result['foo'])
+                self.assertLess(result['foo'], 100)
+                self.assertIn(result['bar'], (1,2,3,))
+                self.assertLessEqual(0, result['baz'])
+                self.assertLess(result['baz'], (1 << 4))
+                self.assertIn(result['bob'], (0,1))
+                self.assertIn(result['dan'], (0,1,2,4))
+                self.assertEqual(result['joe'], 2)
         self._test(r, 1000, check)
 
     def test_multi_basic(self):
@@ -65,7 +69,8 @@ class RandObjTests(unittest.TestCase):
         r.add_multi_var_constraint(abc, ("a","b","c"))
         def check(results):
             for result in results:
-                self.assertTrue(result['a'] < result['b'] < result['c'], f'Check failed for {result=}')
+                self.assertLess(result['a'], result['b'], f'Check failed for {result=}')
+                self.assertLess(result['b'], result['c'], f'Check failed for {result=}')
         self._test(r, 100, check)
 
     def test_multi_plusone(self):
@@ -80,7 +85,7 @@ class RandObjTests(unittest.TestCase):
         r.add_multi_var_constraint(plus_one, ("x", "y"))
         def check(results):
             for result in results:
-                self.assertTrue(result['y'] == result['x'] + 1, f'Check failed for {result=}')
+                self.assertEqual(result['y'], result['x'] + 1, f'Check failed for {result=}')
         self._test(r, 100, check)
 
     def test_multi_sum(self):
@@ -88,16 +93,39 @@ class RandObjTests(unittest.TestCase):
         Test a much trickier multi-variable constraint
         '''
         r = RandObj(self.random)
-        r.add_rand_var("x", range(-100, 100), order=0)
-        r.add_rand_var("y", range(-100, 100), order=0)
-        r.add_rand_var("z", range(-100, 100), order=0)
+        def nonzero(x):
+            return x != 0
+        r.add_rand_var("x", range(-100, 100), order=0, constraints=(nonzero,))
+        r.add_rand_var("y", range(-100, 100), order=1, constraints=(nonzero,))
+        r.add_rand_var("z", range(-100, 100), order=1, constraints=(nonzero,))
         def sum_41(x, y, z):
             return x + y + z == 41
         r.add_multi_var_constraint(sum_41, ("x", "y", "z"))
         def check(results):
             for result in results:
-                self.assertTrue(result['x'] + result['y'] + result['z'] == 41, f'Check failed for {result=}')
+                self.assertEqual(result['x'] + result['y'] + result['z'], 41, f'Check failed for {result=}')
+                self.assertNotEqual(result['x'], 0, f'Check failed for {result=}')
         self._test(r, 10, check)
+
+    def test_multi_order(self):
+        '''
+        Test a problem that benefits greatly from being solved in a certain order.
+        '''
+        r = RandObj(self.random)
+        r.add_rand_var("a", range(100), order=0)
+        r.add_rand_var("b", range(100), order=1)
+        def mul_lt1000(a, b):
+            return a * b < 1000
+        r.add_multi_var_constraint(mul_lt1000, ('a', 'b'))
+        r.add_rand_var("c", range(100), order=2)
+        def sum_lt100(a, b, c):
+            return a + b + c < 100
+        r.add_multi_var_constraint(sum_lt100, ('a', 'b', 'c'))
+        def check(results):
+            for result in results:
+                self.assertLess(result['a'] * result['b'], 1000, f'Check failed for {result=}')
+                self.assertLess(result['a'] + result['b'] + result['c'], 100, f'Check failed for {result=}')
+        self._test(r, 100, check)
 
     def test_dist(self):
         '''
