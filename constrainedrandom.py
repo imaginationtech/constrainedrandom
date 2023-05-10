@@ -183,7 +183,7 @@ class MultiVarProblem:
         sparse_solver = solutions_per_group is not None
 
         if sparse_solver:
-            solved_vars = defaultdict(list)
+            solved_vars = defaultdict(set)
         else:
             solved_vars = []
             problem = constraint.Problem()
@@ -199,7 +199,7 @@ class MultiVarProblem:
                 # Construct one problem per iteration, add solved variables from previous groups
                 problem = constraint.Problem()
                 for name, values in solved_vars.items():
-                    problem.addVariable(name, values)
+                    problem.addVariable(name, list(values))
             for var in group:
                 group_vars.append(var.name)
                 if var.domain is not None and not isinstance(var.domain, dict):
@@ -239,7 +239,7 @@ class MultiVarProblem:
                         del problem._variables[var]
             # This group is solved, move on to the next group.
             if sparse_solver:
-                if idx != len(groups):
+                if idx != len(groups) - 1:
                     # Store a small number of concrete solutions to avoid bloating the state space.
                     if solutions_per_group < len(solutions):
                         solution_subset = self.random.choices(solutions, k=solutions_per_group)
@@ -247,7 +247,7 @@ class MultiVarProblem:
                         solution_subset = solutions
                     for soln in solution_subset:
                         for name, value in soln.items():
-                            solved_vars[name].append(value)
+                            solved_vars[name].add(value)
             else:
                 solved_vars += group_vars
             constraints = skipped_constraints
@@ -336,6 +336,7 @@ class RandObj:
         Called by randomize before randomizing variables. Can be overridden to do something.
         '''
 
+
     def randomize(self):
         '''
         Randomizes all random variables (in self._random_vars), applying constraints provided (in self._constraints).
@@ -388,103 +389,3 @@ class RandObj:
         '''
         Called by randomize after randomizing variables. Can be overridden to do something.
         '''
-
-
-if __name__ == "__main__":
-    ''' Run some basic tests on functionality and performance. '''
-    import timeit
-
-    def test(name, problem, iterations, check):
-        results = []
-        start_time = timeit.default_timer()
-        for _ in range(iterations):
-            problem.randomize()
-            results.append(dict(problem.__dict__))
-        end_time = timeit.default_timer()
-        time_taken = end_time - start_time
-        hz = iterations/time_taken
-        print(f'{name} took {time_taken:.4g}s for {iterations} iterations ({hz:.1f}Hz)')
-        check(results)
-
-    random = Random(0)
-
-    # Test all basic single random variable features
-    r = RandObj(random)
-    r.add_rand_var("foo", domain=range(100))
-    r.add_rand_var("bar", domain=(1,2,3,))
-    r.add_rand_var("baz", bits=4)
-    r.add_rand_var("bob", domain={0: 9, 1: 1})
-    def not_3(foo):
-        return foo != 3
-    r.add_rand_var("dan", domain=range(5), constraints=not_3)
-    def check(results):
-        for result in results:
-            check = True
-            check &= 0 <= result['foo'] < 100
-            check &= result['bar'] in (1,2,3,)
-            check &= 0 <= result['baz'] < (1 << 4)
-            check &= result['bob'] in (0,1)
-            check &= result['dan'] in (0,1,2,4)
-            assert check, f"Check failed on {result=}"
-    test('basic', r, 100, check)
-
-    # Test a basic multi-variable constraint (easy to randomly fulfill the constraint)
-    r = RandObj(random)
-    r.add_rand_var("a", range(10))
-    r.add_rand_var("b", range(10))
-    r.add_rand_var("c", range(5,10))
-    def abc(a, b, c):
-        return a < b < c
-    r.add_multi_var_constraint(abc, ("a","b","c"))
-    def check(results):
-        for result in results:
-            assert result['a'] < result['b'] < result['c'], f'Check failed for {result=}'
-    test('multi_basic', r, 100, check)
-
-    # Test a slightly trickier multi-variable constraint (much less likely to just randomly get it right)
-    r = RandObj(random)
-    r.add_rand_var("x", range(100), order=0)
-    r.add_rand_var("y", range(100), order=1)
-    def plus_one(x, y):
-        return y == x + 1
-    r.add_multi_var_constraint(plus_one, ("x", "y"))
-    def check(results):
-        for result in results:
-            assert result['y'] == result['x'] + 1, f'Check failed for {result=}'
-    test('multi_plusone', r, 100, check)
-
-    # Test a much tricker multi-variable constraint
-    r = RandObj(random)
-    r.add_rand_var("x", range(-100, 100), order=0)
-    r.add_rand_var("y", range(-100, 100), order=0)
-    r.add_rand_var("z", range(-100, 100), order=1)
-    def sum_41(x, y, z):
-        return x + y + z == 41
-    r.add_multi_var_constraint(sum_41, ("x", "y", "z"))
-    def check(results):
-        for result in results:
-            assert result['x'] + result['y'] + result['z'] == 41, f'Check failed for {result=}'
-    test('multi_sum41', r, 100, check)
-
-    # Test a distribution
-    r = RandObj(random)
-    r.add_rand_var("dist", {0: 25, 1 : 25, range(2,5): 50})
-    def check(results):
-        count_zeroes = 0
-        count_ones = 0
-        count_two_plus = 0
-        for result in results:
-            val = result['dist']
-            if val == 0:
-                count_zeroes += 1
-            elif val == 1:
-                count_ones += 1
-            elif 2 <= val < 5:
-                count_two_plus += 1
-            else:
-                raise ValueError("too high!")
-        # Check it's roughly the right distribution
-        assert 225 <= count_zeroes <= 275
-        assert 225 <= count_ones <= 275
-        assert 475 <= count_two_plus <= 525
-    test('dist', r, 1000, check)
