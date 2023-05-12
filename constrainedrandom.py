@@ -235,10 +235,13 @@ class MultiVarProblem:
                     return None
                 for var in rand_vars:
                     # Add random variables in with a concrete value
-                    var_domain = set()
-                    for _ in range(solutions_per_group):
-                        var_domain.add(var.randomize())
-                    problem.addVariable(var.name, list(var_domain))
+                    if solutions_per_group > 1:
+                        var_domain = set()
+                        for _ in range(solutions_per_group):
+                            var_domain.add(var.randomize())
+                        problem.addVariable(var.name, list(var_domain))
+                    else:
+                        problem.addVariable(var.name, (var.randomize(),))
                 solutions = problem.getSolutions()
                 if len(solutions) > 0:
                     break
@@ -246,7 +249,7 @@ class MultiVarProblem:
                     attempts += 1
                     for var in rand_vars:
                         # Remove from problem, they will be re-added with different concrete values
-                        del problem._variables[var]
+                        del problem._variables[var.name]
             # This group is solved, move on to the next group.
             if sparse_solver:
                 if idx != len(groups) - 1:
