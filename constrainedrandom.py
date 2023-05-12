@@ -1,18 +1,3 @@
-'''
-
-Wrappers around the Python `random` and `constraint` modules,
-providing commonly-used SV-style randomisation.
-
-Goals:
-  - repeatable, i.e. works deterministically with the same seed.
-  - fast.
-  - easy-to-use for those with a SystemVerilog background.
-
-TODO:
-  - Add meaningful benchmarking against similar libraries.
-
-'''
-
 from collections import defaultdict
 from functools import partial
 

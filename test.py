@@ -7,7 +7,7 @@ import sys
 from argparse import ArgumentParser
 
 from constrainedrandom import Random, RandObj
-
+from examples import ldInstr
 
 TEST_LENGTH_MULTIPLIER = 1
 
@@ -179,36 +179,7 @@ class RandObjTests(unittest.TestCase):
         '''
         Test something that looks like an instruction opcode, one of the desired
         use cases for this library.
-
-        Test a made-up load instruction with the following rules:
-          - If writeback (wb) is set, src0 is written back with memory offset. In
-            this case, do not allow dst0 to be the same register as src0.
-          - The sum of the current contents of src0 and imm0 should be word-aligned.
-          - The sum of the current contents of src0 and imm0 should not overflow 32
-            bits.
         '''
-        class ldInstr(RandObj):
-
-            def __init__(self, random, *args, **kwargs):
-                super().__init__(random, *args, **kwargs)
-
-                self.add_rand_var('src0', bits=5, order=0)
-                def read_model_for_src0_value():
-                    # Pretend getter for src0 current value
-                    return 0xfffffbcd
-                self.add_rand_var('src0_value', fn=read_model_for_src0_value, order=0)
-                self.add_rand_var('wb', bits=1, order=0)
-                self.add_rand_var('dst0', bits=5, order=1)
-                self.add_rand_var('imm0', bits=11, order=2)
-                def wb_dst_src(wb, dst0, src0):
-                    if wb:
-                        return dst0 != src0
-                    return True
-                self.add_multi_var_constraint(wb_dst_src, ('wb', 'dst0', 'src0'))
-                def sum_src0_imm0(src0_value, imm0):
-                    address = src0_value + imm0
-                    return (address & 3 == 0) and (address < 0xffffffff)
-                self.add_multi_var_constraint(sum_src0_imm0, ('src0_value', 'imm0'))
 
         ld_instr = ldInstr(self.random)
         def check(results):
