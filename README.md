@@ -21,7 +21,7 @@ While it (almost always?) produces a faster program when a user manually writes 
 
 You can refer to `examples.py` and `test.py` to see various examples of how to use the library. Here is one such example:
 
-```
+```python
 from constrainedrandom import RandObj, Random
 
 class ldInstr(RandObj):
