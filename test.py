@@ -86,6 +86,8 @@ class RandObjTests(unittest.TestCase):
         Test a slightly trickier multi-variable constraint (much less likely to just randomly get it right)
         '''
         r = RandObj(self.random)
+        # Very unlikely (1/100) to solve the problem naively, just skip to applying constraints.
+        r.set_naive_solve(False)
         r.add_rand_var("x", range(100), order=0)
         r.add_rand_var("y", range(100), order=1)
         def plus_one(x, y):
@@ -101,6 +103,8 @@ class RandObjTests(unittest.TestCase):
         Test a much trickier multi-variable constraint
         '''
         r = RandObj(self.random)
+        # Very unlikely (1/200^3) to solve the problem naively, just skip to applying constraints.
+        r.set_naive_solve(False)
         def nonzero(x):
             return x != 0
         r.add_rand_var("x", range(-100, 100), order=0, constraints=(nonzero,))

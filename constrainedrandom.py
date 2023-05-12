@@ -51,7 +51,7 @@ class RandVar:
 
     def __init__(self, parent, name, order, *, domain=None, bits=None, fn=None, args=None, constraints=None, max_iterations=MAX_ITERATIONS):
         self.parent = parent
-        self.random = self.parent.random
+        self.random = self.parent._random
         self.name = name
         self.order = order
         self.max_iterations = max_iterations
@@ -130,7 +130,7 @@ class MultiVarProblem:
 
     def __init__(self, parent, vars, constraints, max_iterations=MAX_ITERATIONS):
         self.parent = parent
-        self.random = self.parent.random
+        self.random = self.parent._random
         self.vars = vars
         self.constraints = constraints
         self.max_iterations = max_iterations
@@ -306,11 +306,21 @@ class RandObj:
         seed:            What seed to use for randomisation.
         max_iterations:  The maximum number of attempts to solve a problem before giving up.
         '''
-        self.random = random
+        # Prefix 'internal use' variables with '_', as randomised results are populated to the class
+        self._random = random
         self._random_vars = {}
         self._constraints = []
         self._constrained_vars = set()
         self._max_iterations = max_iterations
+        self._naive_solve = True
+
+    def set_naive_solve(self, naive: bool):
+        '''
+        Disable/enable naive solving step, i.e. randomising and checking constraints.
+        For some problems, it is more expedient to skip this step and go straight to
+        a MultiVarProblem.
+        '''
+        self._naive_solve = naive
 
     def add_rand_var(self, name, domain=None, bits=None, fn=None, args=None, constraints=None, order=0):
         '''
@@ -367,27 +377,28 @@ class RandObj:
         # This will be faster than constructing a MultiVarProblem if the constraints turn out
         # to be trivial. Only try this a few times so as not to waste time.
         constraints_satisfied = len(self._constraints) == 0
-        attempts = 0
-        max = self._max_iterations // 10
-        while not constraints_satisfied:
-            if attempts == max:
-                break
-            problem = constraint.Problem()
-            for var in self._constrained_vars:
-                problem.addVariable(var, (result[var],))
-            for _constraint, variables in self._constraints:
-                problem.addConstraint(_constraint, variables)
-            solutions = problem.getSolutions()
-            if len(solutions) > 0:
-                # At least one solution was found, all is well
-                constraints_satisfied = True
-                solution = self.random.choice(solutions)
-                result.update(solution)
-            else:
-                # No solution found, re-randomise and try again
+        if self._naive_solve:
+            attempts = 0
+            max = self._max_iterations
+            while not constraints_satisfied:
+                if attempts == max:
+                    break
+                problem = constraint.Problem()
                 for var in self._constrained_vars:
-                    result[var] = self._random_vars[var].randomize()
-                attempts += 1
+                    problem.addVariable(var, (result[var],))
+                for _constraint, variables in self._constraints:
+                    problem.addConstraint(_constraint, variables)
+                solutions = problem.getSolutions()
+                if len(solutions) > 0:
+                    # At least one solution was found, all is well
+                    constraints_satisfied = True
+                    solution = self._random.choice(solutions)
+                    result.update(solution)
+                else:
+                    # No solution found, re-randomise and try again
+                    for var in self._constrained_vars:
+                        result[var] = self._random_vars[var].randomize()
+                    attempts += 1
 
         # If constraints are still not satisfied by this point, construct a multi-variable
         # problem and solve them properly
