@@ -2,20 +2,28 @@
 
 import timeit
 import unittest
+import sys
+
+from argparse import ArgumentParser
 
 from constrainedrandom import Random, RandObj
+
+
+TEST_LENGTH_MULTIPLIER = 1
+
 
 class RandObjTests(unittest.TestCase):
     '''
     Container for unit tests for constrainedrandom.RandObj
     '''
 
-    def _test(self, problem, iterations, check):
+    def randobj_test(self, problem, iterations, check):
         '''
-        Reusable test function to run a problem for a number of iterations and perform checks.
+        Reusable test function to randomize a RandObj for a number of iterations and perform checks.
         '''
         results = []
         start_time = timeit.default_timer()
+        iterations *= TEST_LENGTH_MULTIPLIER
         for _ in range(iterations):
             problem.randomize()
             results.append(dict(problem.__dict__))
@@ -54,7 +62,7 @@ class RandObjTests(unittest.TestCase):
                 self.assertIn(result['bob'], (0,1))
                 self.assertIn(result['dan'], (0,1,2,4))
                 self.assertEqual(result['joe'], 2)
-        self._test(r, 1000, check)
+        self.randobj_test(r, 1000, check)
 
     def test_multi_basic(self):
         '''
@@ -71,7 +79,7 @@ class RandObjTests(unittest.TestCase):
             for result in results:
                 self.assertLess(result['a'], result['b'], f'Check failed for {result=}')
                 self.assertLess(result['b'], result['c'], f'Check failed for {result=}')
-        self._test(r, 100, check)
+        self.randobj_test(r, 100, check)
 
     def test_multi_plusone(self):
         '''
@@ -86,7 +94,7 @@ class RandObjTests(unittest.TestCase):
         def check(results):
             for result in results:
                 self.assertEqual(result['y'], result['x'] + 1, f'Check failed for {result=}')
-        self._test(r, 100, check)
+        self.randobj_test(r, 100, check)
 
     def test_multi_sum(self):
         '''
@@ -105,7 +113,7 @@ class RandObjTests(unittest.TestCase):
             for result in results:
                 self.assertEqual(result['x'] + result['y'] + result['z'], 41, f'Check failed for {result=}')
                 self.assertNotEqual(result['x'], 0, f'Check failed for {result=}')
-        self._test(r, 10, check)
+        self.randobj_test(r, 10, check)
 
     def test_multi_order(self):
         '''
@@ -125,7 +133,7 @@ class RandObjTests(unittest.TestCase):
             for result in results:
                 self.assertLess(result['a'] * result['b'], 1000, f'Check failed for {result=}')
                 self.assertLess(result['a'] + result['b'] + result['c'], 100, f'Check failed for {result=}')
-        self._test(r, 100, check)
+        self.randobj_test(r, 100, check)
 
     def test_dist(self):
         '''
@@ -133,6 +141,16 @@ class RandObjTests(unittest.TestCase):
         '''
         r = RandObj(self.random)
         r.add_rand_var("dist", {0: 25, 1 : 25, range(2,5): 50})
+        # Work out what the distribution should be
+        iterations = 1000
+        modified_iterations = iterations * TEST_LENGTH_MULTIPLIER
+        quarter = modified_iterations // 4
+        half = modified_iterations // 2
+        # Allow 10% leeway
+        q_delta = quarter // 10
+        h_delta = half // 10
+        quarter_range = range(quarter - q_delta, quarter + q_delta + 1)
+        half_range = range(half - h_delta, half + h_delta + 1)
         def check(results):
             count_zeroes = 0
             count_ones = 0
@@ -148,11 +166,22 @@ class RandObjTests(unittest.TestCase):
                 else:
                     self.fail("too high!")
             # Check it's roughly the right distribution
-            self.assertTrue(225 <= count_zeroes <= 275)
-            self.assertTrue(225 <= count_ones <= 275)
-            self.assertTrue(475 <= count_two_plus <= 525)
-        self._test(r, 1000, check)
+            self.assertIn(count_zeroes, quarter_range)
+            self.assertIn(count_ones, quarter_range)
+            self.assertIn(count_two_plus, half_range)
+        self.randobj_test(r, iterations, check)
+
+
+def parse_args():
+    parser = ArgumentParser(description='Run unit tests for constrainedrandom library')
+    parser.add_argument('--length-mul', type=int, default=1, help='Multiplier for test length, when desiring greater certainty on performance.')
+    args, extra = parser.parse_known_args()
+    return args, extra
 
 
 if __name__ == "__main__":
-    unittest.main()
+    args, extra = parse_args()
+    TEST_LENGTH_MULTIPLIER = args.length_mul
+    # Reconstruct argv
+    argv = [sys.argv[0]] + extra
+    unittest.main(argv=argv)
