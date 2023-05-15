@@ -7,7 +7,7 @@ import sys
 from argparse import ArgumentParser
 
 from constrainedrandom import Random, RandObj
-from examples import ldInstr
+from examples.ldinstr import ldInstr
 
 TEST_LENGTH_MULTIPLIER = 1
 
