@@ -25,13 +25,14 @@ class RandObjTests(unittest.TestCase):
         Reusable test function to randomize a RandObj for a number of iterations and perform checks.
         '''
         results = []
-        start_time = timeit.default_timer()
         iterations *= TEST_LENGTH_MULTIPLIER
+        time_taken = 0
         for _ in range(iterations):
+            start_time = timeit.default_timer()
             problem.randomize()
+            end_time = timeit.default_timer()
+            time_taken += end_time - start_time
             results.append(dict(problem.__dict__))
-        end_time = timeit.default_timer()
-        time_taken = end_time - start_time
         hz = iterations/time_taken
         print(f'{self._testMethodName} took {time_taken:.4g}s for {iterations} iterations ({hz:.1f}Hz)')
         check(results)
