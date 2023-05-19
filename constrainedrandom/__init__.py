@@ -89,24 +89,23 @@ class RandVar:
                 self.randomizer = partial(self.random.dist, self.domain)
             else:
                 raise TypeError(f'RandVar was passed a domain of a bad type - {self.domain}. Domain should be a range, list, tuple or dictionary.')
-        self.value = None
 
     def randomize(self):
-        self.value = self.randomizer()
+        value = self.randomizer()
         okay = not self.check_constraints
         iterations = 0
         while not okay:
             if iterations == self.max_iterations:
                 raise RuntimeError("Too many iterations, can't solve problem")
             problem = constraint.Problem()
-            problem.addVariable(self.name, (self.value,))
+            problem.addVariable(self.name, (value,))
             for con in self.constraints:
                 problem.addConstraint(con, (self.name,))
             okay = problem.getSolution() is not None
             if not okay:
-                self.value = self.randomizer()
+                value = self.randomizer()
             iterations += 1
-        return self.value
+        return value
 
 
 class MultiVarProblem:
@@ -403,3 +402,22 @@ class RandObj:
         '''
         Called by randomize after randomizing variables. Can be overridden to do something.
         '''
+
+    def get_results(self):
+        '''
+        Returns a dictionary of the results from the most recent randomization.
+        This is mainly provided for testing purposes.
+
+        Note that individual variables can be accessed as member variables of
+        a RandObj instance once randomized, e.g.
+        rand = Random(0)
+        randobj = RandObj(rand)
+        randobj.add_rand_var('a', domain=range(10))
+        randobj.randomize()
+        print(randobj.a)
+        '''
+        try:
+            # Return a new dict object rather than a reference to this object's __dict__
+            return {k: self.__dict__[k] for k in self._random_vars.keys()}
+        except KeyError as e:
+            raise RuntimeError("Can't call .get_results() until .randomize() has been called at least once.")
