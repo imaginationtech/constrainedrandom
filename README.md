@@ -1,21 +1,34 @@
 # `constrainedrandom`
 
-A library to provide SystemVerilog-style randomizable objects in python.
+A library for creating and solving constrained randomization problems.
 
-This is achieved by providing wrappers around the Python [`random`](https://docs.python.org/3/library/random.html) and [`constraint`](https://pypi.org/project/python-constraint/) modules, and is aimed to be as efficient as possible in a language like Python.
+Use this library to create SystemVerilog-style "declarative" randomizable objects in Python.
 
-## Goals of the library:
-  - Easy-to-use for those with a SystemVerilog background.
+This is achieved by providing wrappers around the Python [`random`](https://docs.python.org/3/library/random.html) and [`constraint`](https://pypi.org/project/python-constraint/) packages, and aims to be as efficient as possible in a language like Python.
+
+## Goals of the library
+
+These goals should define the future development of the library.
+
+  - Easy-to-use for those with a SystemVerilog/verification background.
+    - This library is aimed at a pre-silicon verification audience who are familiar with SystemVerilog.
+    - It does not need to exactly replicate the syntax and oddities of SystemVerilog, but it must adhere to the principle of declariative randomization.
   - Repeatable, i.e. works deterministically with the same seed.
   - Fast. Or at least as fast as can be expected from a Python library rather than say C/C++.
-    - Originally, the creation of the library was motivated by [`pyvsc`](https://github.com/fvutils/pyvsc). `pyvsc` is feature-rich and user-friendly, but not fast enough for production usage.
+    - Originally, the creation of the library was motivated by [`pyvsc`](https://github.com/fvutils/pyvsc). `pyvsc` is feature-rich and user-friendly for those with an SV background, but not fast enough for production usage.
 
 ## Motivation
 Why bother with a Python library for this? Why not just use procedural randomization?
 
 In pre-silicon verification, a lot of time is spent writing constrained random testcases. Many developers are used to SystemVerilog, a language which provides a rich set of built-in randomization features. These are written in a declarative manner.
 
-While it (almost always?) produces a faster program when a user manually writes procedurally code to randomize their variables, it is certainly easier not to have to think about that problem and instead delegate it. Writing constraints declaratively is perceived by many verification engineers to make development easier. Ease of development must be traded off against program speed (which is also why Python exists and we don't all write C all the time).
+While it (almost always?) produces a faster program when a user manually writes procedural code to randomize their variables, it is certainly easier not to have to think about that problem and instead delegate it. Writing constraints declaratively is perceived by many verification engineers to make development easier. Ease of development must be traded off against program speed (which is the same reason Python exists, and we don't all write C all the time).
+
+## Installation
+
+```bash
+$ pip install constrainedrandom
+```
 
 ## How to use
 
@@ -347,8 +360,18 @@ The user is free to either inherit from `RandObj` (for more complex cases like t
 
 In local testing, the instruction above can be randomized at a rate of approximately 2000Hz, which is 'fast enough' for most pre-silicon verification simulations.
 
-## `TODO`:
+## `TODO`
   - Add meaningful benchmarking against similar libraries (mainly [`pyvsc`](https://github.com/fvutils/pyvsc).)
+  - Add equivalent SystemVerilog testcases for benchmarking.
+  - Add type hinting.
+
+## Contributions
+
+Please feel free to contribute to the project, following these guidelines:
+- Please contribute by creating a fork and submitting a pull request.
+- Pull requests should be as small as possible for what issue they are trying to address.
+- Pull requests must respect the goals of the library, as stated above.
+- Pull requests should pass all the tests in the `tests/` directory.
 
 ## Contact the author(s)
 
