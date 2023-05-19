@@ -12,7 +12,7 @@ These goals should define the future development of the library.
 
   - Easy-to-use for those with a SystemVerilog/verification background.
     - This library is aimed at a pre-silicon verification audience who are familiar with SystemVerilog.
-    - It does not need to exactly replicate the syntax and oddities of SystemVerilog, but it must adhere to the principle of declariative randomization.
+    - It does not need to exactly replicate the syntax and oddities of SystemVerilog, but it must adhere to the principle of declarative randomization.
   - Repeatable, i.e. works deterministically with the same seed.
   - Fast. Or at least as fast as can be expected from a Python library rather than say C/C++.
     - Originally, the creation of the library was motivated by [`pyvsc`](https://github.com/fvutils/pyvsc).
