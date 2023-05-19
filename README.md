@@ -15,7 +15,9 @@ These goals should define the future development of the library.
     - It does not need to exactly replicate the syntax and oddities of SystemVerilog, but it must adhere to the principle of declariative randomization.
   - Repeatable, i.e. works deterministically with the same seed.
   - Fast. Or at least as fast as can be expected from a Python library rather than say C/C++.
-    - Originally, the creation of the library was motivated by [`pyvsc`](https://github.com/fvutils/pyvsc). `pyvsc` is feature-rich and user-friendly for those with an SV background, but not fast enough for production usage.
+    - Originally, the creation of the library was motivated by [`pyvsc`](https://github.com/fvutils/pyvsc).
+    - `pyvsc` is feature-rich and user-friendly for those with an SV background, but we found it was not fast enough for production usage.
+    - This library aims to achieve at least a 10x speedup over `pyvsc`. See the `benchmarks/` directory or run `python -m benchmarks` for testing.
 
 ## Motivation
 Why bother with a Python library for this? Why not just use procedural randomization?

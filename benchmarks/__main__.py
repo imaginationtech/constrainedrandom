@@ -75,6 +75,10 @@ class BenchmarkTests(unittest.TestCase):
         randobjs = {'vsc': vsc_basic(), 'cr': cr_basic(Random(0))}
         def check(results):
             self.assertGreater(results['cr'][1], results['vsc'][1])
+            # This testcase is typically 40-50x faster, which may vary depending
+            # on machine. Ensure it doesn't fall below 30x.
+            speedup = results['cr'][1] / results['vsc'][1]
+            self.assertGreater(speedup, 30, "Performance has degraded!")
         self.run_benchmark(randobjs, 100, check)
 
     def test_in(self):
@@ -88,6 +92,10 @@ class BenchmarkTests(unittest.TestCase):
         }
         def check(results):
             self.assertGreater(results['cr'][1], results['vsc'][1])
+            # This testcase is typically 13-15x faster, which may vary depending
+            # on machine. Ensure it doesn't fall below 10x.
+            speedup = results['cr'][1] / results['vsc'][1]
+            self.assertGreater(speedup, 10, "Performance has degraded!")
         self.run_benchmark(randobjs, 100, check)
 
     def test_ldinstr(self):
@@ -100,6 +108,10 @@ class BenchmarkTests(unittest.TestCase):
         }
         def check(results):
             self.assertGreater(results['cr'][1], results['vsc'][1])
+            # This testcase is typically 13-15x faster, which may vary depending
+            # on machine. Ensure it doesn't fall below 10x.
+            speedup = results['cr'][1] / results['vsc'][1]
+            self.assertGreater(speedup, 10, "Performance has degraded!")
         self.run_benchmark(randobjs, 100, check)
 
 
