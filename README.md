@@ -361,7 +361,6 @@ The user is free to either inherit from `RandObj` (for more complex cases like t
 In local testing, the instruction above can be randomized at a rate of approximately 2000Hz, which is 'fast enough' for most pre-silicon verification simulations.
 
 ## `TODO`
-  - Add meaningful benchmarking against similar libraries (mainly [`pyvsc`](https://github.com/fvutils/pyvsc).)
   - Add equivalent SystemVerilog testcases for benchmarking.
   - Add type hinting.
 
@@ -369,9 +368,10 @@ In local testing, the instruction above can be randomized at a rate of approxima
 
 Please feel free to contribute to the project, following these guidelines:
 - Please contribute by creating a fork and submitting a pull request.
-- Pull requests should be as small as possible for what issue they are trying to address.
+- Pull requests should be as small as possible to resolve the issue they are trying to address.
 - Pull requests must respect the goals of the library, as stated above.
-- Pull requests should pass all the tests in the `tests/` directory.
+- Pull requests should pass all the tests in the `tests/` directory. Run `python -m tests`.
+- Pull requests should take care not to make performance worse except for cases which require bug fixes. Run `python -m tests` and `python -m benchmarks`.
 
 ## Contact the author(s)
 
