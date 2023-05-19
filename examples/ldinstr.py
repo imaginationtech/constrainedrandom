@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2022 Imagination Technologies Ltd. All Rights Reserved
+
 from constrainedrandom import RandObj, Random
 
 class ldInstr(RandObj):

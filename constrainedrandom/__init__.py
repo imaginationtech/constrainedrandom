@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2023 Imagination Technologies Ltd. All Rights Reserved
+
 from collections import defaultdict
 from functools import partial
 
