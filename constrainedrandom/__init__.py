@@ -284,7 +284,7 @@ class MultiVarProblem:
 class RandObj:
     '''
     Randomisable object.
-    
+
     Goal: Implements everything that would be expected from an SV randomisable object.
     '''
 
