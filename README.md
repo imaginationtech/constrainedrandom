@@ -13,10 +13,6 @@ This is achieved by providing wrappers around the Python [`random`](https://docs
 $ pip install constrainedrandom
 ```
 
-## `TODO`
-  - Add equivalent SystemVerilog testcases for benchmarking.
-  - Add type hinting.
-
 ## Contributions
 
 Please feel free to contribute to the project, following these guidelines:
@@ -25,6 +21,9 @@ Please feel free to contribute to the project, following these guidelines:
 - Pull requests must respect the goals of the library, as stated above.
 - Pull requests should pass all the tests in the `tests/` directory. Run `python -m tests`.
 - Pull requests should take care not to make performance worse except for cases which require bug fixes. Run `python -m tests` and `python -m benchmarks`.
+
+## `TODO`
+  - Add equivalent SystemVerilog testcases for benchmarking.
 
 ## Contact the author(s)
 

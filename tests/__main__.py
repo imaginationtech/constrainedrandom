@@ -101,9 +101,9 @@ class RandObjTests(unittest.TestCase):
         '''
         def get_randobj(seed):
             r = RandObj(Random(seed))
-            r.add_rand_var("a", range(10))
-            r.add_rand_var("b", range(10))
-            r.add_rand_var("c", range(5,10))
+            r.add_rand_var("a", domain=range(10))
+            r.add_rand_var("b", domain=range(10))
+            r.add_rand_var("c", domain=range(5,10))
             def abc(a, b, c):
                 return a < b < c
             r.add_multi_var_constraint(abc, ("a","b","c"))
@@ -124,8 +124,8 @@ class RandObjTests(unittest.TestCase):
             r = RandObj(Random(seed))
             # Very unlikely (1/100) to solve the problem naively, just skip to applying constraints.
             r.set_naive_solve(False)
-            r.add_rand_var("x", range(100), order=0)
-            r.add_rand_var("y", range(100), order=1)
+            r.add_rand_var("x", domain=range(100), order=0)
+            r.add_rand_var("y", domain=range(100), order=1)
             def plus_one(x, y):
                 return y == x + 1
             r.add_multi_var_constraint(plus_one, ("x", "y"))
@@ -147,9 +147,9 @@ class RandObjTests(unittest.TestCase):
             r.set_naive_solve(False)
             def nonzero(x):
                 return x != 0
-            r.add_rand_var("x", range(-100, 100), order=0, constraints=(nonzero,))
-            r.add_rand_var("y", range(-100, 100), order=1, constraints=(nonzero,))
-            r.add_rand_var("z", range(-100, 100), order=1, constraints=(nonzero,))
+            r.add_rand_var("x", domain=range(-100, 100), order=0, constraints=(nonzero,))
+            r.add_rand_var("y", domain=range(-100, 100), order=1, constraints=(nonzero,))
+            r.add_rand_var("z", domain=range(-100, 100), order=1, constraints=(nonzero,))
             def sum_41(x, y, z):
                 return x + y + z == 41
             r.add_multi_var_constraint(sum_41, ("x", "y", "z"))
@@ -168,12 +168,12 @@ class RandObjTests(unittest.TestCase):
         '''
         def get_randobj(seed):
             r = RandObj(Random(seed))
-            r.add_rand_var("a", range(100), order=0)
-            r.add_rand_var("b", range(100), order=1)
+            r.add_rand_var("a", domain=range(100), order=0)
+            r.add_rand_var("b", domain=range(100), order=1)
             def mul_lt1000(a, b):
                 return a * b < 1000
             r.add_multi_var_constraint(mul_lt1000, ('a', 'b'))
-            r.add_rand_var("c", range(100), order=2)
+            r.add_rand_var("c", domain=range(100), order=2)
             def sum_lt100(a, b, c):
                 return a + b + c < 100
             r.add_multi_var_constraint(sum_lt100, ('a', 'b', 'c'))
@@ -192,7 +192,7 @@ class RandObjTests(unittest.TestCase):
         '''
         def get_randobj(seed):
             r = RandObj(Random(seed))
-            r.add_rand_var("dist", {0: 25, 1 : 25, range(2,5): 50})
+            r.add_rand_var("dist", domain={0: 25, 1 : 25, range(2,5): 50})
             return r
 
         # Work out what the distribution should be
