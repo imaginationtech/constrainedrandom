@@ -13,6 +13,18 @@ This is achieved by providing wrappers around the Python [`random`](https://docs
 $ pip install constrainedrandom
 ```
 
+## Documentation
+
+`TODO` add link to readthedocs
+
+To build the documentation yourself:
+```bash
+$ cd docs
+$ make html
+```
+
+The index page is at `docs/_build/html/index.html` - you can open this in a web browser.
+
 ## Contributions
 
 Please feel free to contribute to the project, following these guidelines:
@@ -21,6 +33,7 @@ Please feel free to contribute to the project, following these guidelines:
 - Pull requests must respect the goals of the library, as stated above.
 - Pull requests should pass all the tests in the `tests/` directory. Run `python -m tests`.
 - Pull requests should take care not to make performance worse except for cases which require bug fixes. Run `python -m tests` and `python -m benchmarks`.
+- Pull requests should update the documentation for any added/changed functionality.
 
 ## `TODO`
   - Add equivalent SystemVerilog testcases for benchmarking.
