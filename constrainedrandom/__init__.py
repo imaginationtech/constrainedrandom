@@ -578,6 +578,7 @@ class RandObj:
 
         :return: ``None``
         '''
+        pass
 
     def randomize(self) -> None:
         '''
@@ -639,6 +640,7 @@ class RandObj:
 
         :return: ``None``
         '''
+        pass
 
     def get_results(self) -> dict[str, Any]:
         '''
