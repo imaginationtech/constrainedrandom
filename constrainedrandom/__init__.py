@@ -4,7 +4,7 @@
 from __future__ import annotations
 from collections import defaultdict
 from functools import partial
-from typing import Any, Callable, Iterable, Optional, Union
+from typing import Any, Callable, Dict, Iterable, Optional, Union
 
 import constraint
 import random
@@ -16,7 +16,7 @@ MAX_ITERATIONS = 100
 CONSTRAINT_MAX_DOMAIN_SIZE = 1 << 10
 
 # Distribution type
-Dist = dict[Any, int]
+Dist = Dict[Any, int]
 
 
 class Random(random.Random):
@@ -232,7 +232,7 @@ class MultiVarProblem:
     def __init__(
         self,
         parent: RandObj,
-        vars: dict[str, RandVar],
+        vars: Dict[str, RandVar],
         constraints: Iterable[Constraint],
         max_iterations: int=MAX_ITERATIONS
     ) -> None:
@@ -278,7 +278,7 @@ class MultiVarProblem:
 
         return result
 
-    def _solve(self, groups: list[list[RandVar]], max_iterations:int, solutions_per_group: Optional[int]=None) -> Union[dict[str, Any], None]:
+    def _solve(self, groups: list[list[RandVar]], max_iterations:int, solutions_per_group: Optional[int]=None) -> Union[Dict[str, Any], None]:
         '''
         Constraint solving algorithm (internally used by :class:`MultiVarProblem`).
 
@@ -391,7 +391,7 @@ class MultiVarProblem:
 
         return self.random.choice(solutions)
 
-    def solve(self) -> Union[dict[str, Any], None]:
+    def solve(self) -> Union[Dict[str, Any], None]:
         '''
         Attempt to solve the variables with respect to the constraints.
 
@@ -642,7 +642,7 @@ class RandObj:
         '''
         pass
 
-    def get_results(self) -> dict[str, Any]:
+    def get_results(self) -> Dict[str, Any]:
         '''
         Returns a dictionary of the results from the most recent randomization.
         This is mainly provided for testing purposes.
