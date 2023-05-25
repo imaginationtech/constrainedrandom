@@ -199,17 +199,17 @@ class RandVar:
             the allowed number of iterations.
         '''
         value = self.randomizer()
-        okay = not self.check_constraints
+        value_valid = not self.check_constraints
         iterations = 0
-        while not okay:
+        while not value_valid:
             if iterations == self.max_iterations:
                 raise RuntimeError("Too many iterations, can't solve problem")
             problem = constraint.Problem()
             problem.addVariable(self.name, (value,))
             for con in self.constraints:
                 problem.addConstraint(con, (self.name,))
-            okay = problem.getSolution() is not None
-            if not okay:
+            value_valid = problem.getSolution() is not None
+            if not value_valid:
                 value = self.randomizer()
             iterations += 1
         return value
