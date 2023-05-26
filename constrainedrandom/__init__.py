@@ -1,43 +1,141 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2023 Imagination Technologies Ltd. All Rights Reserved
 
+from __future__ import annotations
 from collections import defaultdict
 from functools import partial
+from typing import Any, Callable, Dict, Iterable, Optional, Union
 
 import constraint
 import random
 
 
-# The maximum iterations before giving up on any randomisation
+# The maximum iterations before giving up on any randomization
 MAX_ITERATIONS = 100
 # The largest domain size to use with the constraint library
 CONSTRAINT_MAX_DOMAIN_SIZE = 1 << 10
 
+# Distribution type
+Dist = Dict[Any, int]
+
 
 class Random(random.Random):
     '''
-    Seeded, repeatable, deterministic random object. Ideally one of these should be used per seeded
-    random activity.
+    Seeded, repeatable, deterministic random generator object.
+    Subclass of :class:`random.Random`, enhanced with some quality-of-life features.
+    Ideally one of these should be used per seeded random activity, e.g.
+    in :class:`constrainedrandom.RandVar`.
 
-    Subclass of random.Random, enhanced with some quality-of-life features.
+    :param seed: Fixed seed for randomization.
+
+    :example:
+
+    .. code-block:: python
+
+        # Create a random generator with seed 0.
+        r1 = Random(seed=0)
+        # Output five random 32-bit integers.
+        for i in range(5):
+            print(r1.randbits(32))
+
+        # Create a second random generator with seed 0.
+        r2 = Random(seed=0)
+        # These five values will be the same as output by r1.
+        for i in range(5):
+            print(r2.randbits(32))
+
+        # Create a third random generator with seed 1.
+        r3 = Random(seed=1)
+        # These five values will be different to the previous values.
+        for i in range(5):
+            print(r3.randbits(32))
     '''
 
-    def weighted_choice(self, choices_dict):
+    def __init__(self, seed: int) -> None:
+        super().__init__(x=seed)
+
+    def weighted_choice(self, choices_dict: Dist) -> Any:
+        '''
+        Wrapper around ``random.choices``, allowing the user to specify weights in a dictionary.
+
+        :param choices_dict: A dict containing the possible values as keys and relative
+            weights as values.
+        :return: One of the keys of ``choices_dict`` chosen at random, based on weighting.
+        :example:
+
+        .. code-block:: python
+
+            r = Random(seed=0)
+            # 0 will be chosen 25% of the time, 1 25% of the time and 'foo' 50% of the time
+            value = r.weighted_choice({0: 25, 1: 25, 'foo': 50})
+        '''
         return self.choices(tuple(choices_dict.keys()), weights=tuple(choices_dict.values()))
 
-    def dist(self, dist_dict):
+    def dist(self, dist_dict: Dist) -> Any:
+        '''
+        Random distribution. As :func:`weighted_choice`, but allows ``range`` to be used as
+        a key to the dictionary, which if chosen is then evaluated as a random range.
+
+        :param dist_dict: A dict containing the possible values as keys and relative
+            weights as values. If a range is supplied as a key, it will be evaluated
+            as a random range.
+        :return: One of the keys of ``dist_dict`` chosen at random, based on weighting.
+            If the key is a range, evaluate the range as a random range before returning.
+        :example:
+
+        .. code-block:: python
+
+            r = Random(seed=0)
+            # 0 will be chosen 25% of the time, a value in the range 1 to 9 25% of the time
+            # and 'foo' 50% of the time
+            value = r.dist({0: 25, range(1, 10): 25, 'foo': 50})
+        '''
         answer = self.weighted_choice(choices_dict=dist_dict)[0]
         if isinstance(answer, range):
             return self.randrange(answer.start, answer.stop)
         return answer
 
 
+# Domain type
+Domain = Union[Iterable[Any], range, Dist]
+# Constraint type
+Constraint = Callable[..., bool]
+
 class RandVar:
     '''
-    Randomisable variable. For internal use with RandObj.
+    Randomizable variable. For internal use with RandObj.
+
+    :param parent: The :class:`RandObj` instance that owns this instance.
+    :param name: The name of this random variable.
+    :param order: The solution order for this variable with respect to other variables.
+    :param domain: The possible values for this random variable, expressed either
+        as a ``range``, or as an iterable (e.g. ``list``, ``tuple``) of possible values.
+        Mutually exclusive with ``bits`` and ``fn``.
+    :param bits: Specifies the possible values of this variable in terms of a width
+        in bits. E.g. ``bits=32`` signifies this variable can be ``0 <= x < 1 << 32``.
+        Mutually exclusive with ``domain`` and ``fn``.
+    :param fn: Specifies a function to call that will provide the value of this random
+        variable.
+        Mutually exclusive with ``domain`` and ``bits``.
+    :param args: Arguments to pass to the function specified in ``fn``.
+        If ``fn`` is not used, ``args`` must not be used.
+    :param constraints: List or tuple of constraints that apply to this random variable.
+    :param max_iterations: The maximum number of failed attempts to solve the randomization
+        problem before giving up.
     '''
 
-    def __init__(self, parent, name, order, *, domain=None, bits=None, fn=None, args=None, constraints=None, max_iterations=MAX_ITERATIONS):
+    def __init__(self,
+        parent: RandObj,
+        name: str,
+        order: int,
+        *,
+        domain: Optional[Domain]=None,
+        bits: Optional[int]=None,
+        fn: Optional[Callable]=None,
+        args: Optional[tuple]=None,
+        constraints: Optional[Iterable[Constraint]]=None,
+        max_iterations: int=MAX_ITERATIONS,
+    ) -> None:
         self.parent = parent
         self.random = self.parent._random
         self.name = name
@@ -90,19 +188,28 @@ class RandVar:
             else:
                 raise TypeError(f'RandVar was passed a domain of a bad type - {self.domain}. Domain should be a range, list, tuple or dictionary.')
 
-    def randomize(self):
+    def randomize(self) -> Any:
+        '''
+        Returns a random value based on the definition of this random variable.
+        Does not modify the state of the :class:`RandVar` instance.
+
+        :return: A randomly generated value, conforming to the definition of
+            this random variable, its constraints, etc.
+        :raises RuntimeError: When the problem cannot be solved in fewer than
+            the allowed number of iterations.
+        '''
         value = self.randomizer()
-        okay = not self.check_constraints
+        value_valid = not self.check_constraints
         iterations = 0
-        while not okay:
+        while not value_valid:
             if iterations == self.max_iterations:
                 raise RuntimeError("Too many iterations, can't solve problem")
             problem = constraint.Problem()
             problem.addVariable(self.name, (value,))
             for con in self.constraints:
                 problem.addConstraint(con, (self.name,))
-            okay = problem.getSolution() is not None
-            if not okay:
+            value_valid = problem.getSolution() is not None
+            if not value_valid:
                 value = self.randomizer()
             iterations += 1
         return value
@@ -110,21 +217,39 @@ class RandVar:
 
 class MultiVarProblem:
     '''
-    Multi-variable problem.
+    Multi-variable problem. Used internally by RandObj.
+    Represents one problem concerning multiple random variables,
+    where those variables all share dependencies on one another.
 
-    Used internally by RandObj. Represents one problem concerning multiple random variables.
+    :param parent: The :class:`RandObj` instance that owns this instance.
+    :param vars: The dictionary of names and :class:`RandVar` instances this problem consists of.
+    :param constraints: The list or tuple of constraints associated with
+        the random variables.
+    :param max_iterations: The maximum number of failed attempts to solve the randomization
+        problem before giving up.
     '''
 
-    def __init__(self, parent, vars, constraints, max_iterations=MAX_ITERATIONS):
+    def __init__(
+        self,
+        parent: RandObj,
+        vars: Dict[str, RandVar],
+        constraints: Iterable[Constraint],
+        max_iterations: int=MAX_ITERATIONS
+    ) -> None:
         self.parent = parent
         self.random = self.parent._random
         self.vars = vars
         self.constraints = constraints
         self.max_iterations = max_iterations
 
-    def determine_order(self):
+    def determine_order(self) -> list[list[RandVar]]:
         '''
         Chooses an order in which to resolve the values of the variables.
+        Used internally.
+
+        :return: A list of lists denoting the order in which to solve the problem.
+            Each inner list is a group of variables that can be solved at the same
+            time. Each inner list will be considered separately.
         '''
         # Aim to build a list of lists, each inner list denoting a group of variables
         # to solve at the same time.
@@ -153,22 +278,30 @@ class MultiVarProblem:
 
         return result
 
-    def _solve(self, groups, max_iterations, solutions_per_group=None):
+    def _solve(self, groups: list[list[RandVar]], max_iterations:int, solutions_per_group: Optional[int]=None) -> Union[Dict[str, Any], None]:
         '''
-        Constraint solving algorithm (internally used by MultiVarProblem).
+        Constraint solving algorithm (internally used by :class:`MultiVarProblem`).
 
-        If solutions_per_group is not None, solve one constraint group problem 'sparsely',
-        i.e. keep only a subset of potential solutions between groups.
-        Fast but prone to failure.
-        solutions_per_group = 1 is effectively a depth-first search through the state space
-        and comes with greater benefits of considering each multi-variable constraint at
-        most once.
+        :param groups: The list of lists denoting the order in which to resolve the random variables.
+            See :func:`determine_order`.
+        :param max_iterations: The maximum number of failed attempts to solve the randomization
+            problem before giving up.
+        :param solutions_per_group: If ``solutions_per_group`` is not ``None``,
+            solve each constraint group problem 'sparsely',
+            i.e. maintain only a subset of potential solutions between groups.
+            Fast but prone to failure.
 
-        If solutions_per_group is None, Solve constraint problem 'thoroughly',
-        i.e. keep all possible results between iterations.
-        Slow, but will usually converge.
+            ``solutions_per_group = 1`` is effectively a depth-first search through the state space
+            and comes with greater benefits of considering each multi-variable constraint at
+            most once.
+
+            If ``solutions_per_group`` is ``None``, Solve constraint problem 'thoroughly',
+            i.e. keep all possible results between iterations.
+            Slow, but will usually converge.
+        :returns: A valid solution to the problem, in the form of a dictionary with the
+            names of the random variables as keys and the valid solution as the values.
+            Returns ``None`` if no solution is found within the allotted ``max_iterations``.
         '''
-
         constraints = self.constraints
         sparse_solver = solutions_per_group is not None
 
@@ -258,9 +391,14 @@ class MultiVarProblem:
 
         return self.random.choice(solutions)
 
-    def solve(self):
+    def solve(self) -> Union[Dict[str, Any], None]:
         '''
         Attempt to solve the variables with respect to the constraints.
+
+        :return: One valid solution for the randomization problem, represented as
+            a dictionary with keys referring to the named variables.
+        :raises RuntimeError: When the problem cannot be solved in fewer than
+            the allowed number of iterations.
         '''
         groups = self.determine_order()
 
@@ -283,17 +421,40 @@ class MultiVarProblem:
 
 class RandObj:
     '''
-    Randomisable object.
-    
-    Goal: Implements everything that would be expected from an SV randomisable object.
+    Randomizable object. User-facing class.
+    Contains any number of random variables and constraints.
+    Randomizes to produce a valid solution for those variables and constraints.
+
+    :param random: An instance of :class:`Random`, which controls the
+        seeding and random generation for this class.
+    :param max_iterations: The maximum number of failed attempts to solve the randomization
+        problem before giving up.
+
+    :example:
+
+    .. code-block:: python
+
+        # Create a random object based on a random generator
+        rand_generator = Random(seed=0)
+        rand_obj = RandObj(rand_generator)
+
+        # Add some random variables
+        rand_obj.add_rand_var('one_to_nine', domain=range(10))
+        rand_obj.add_rand_var('eight_bits', bits=8, constraints=(lambda x : x != 0))
+
+        # Add a multi-variable constraint
+        rand_obj.add_multi_var_constraint(lambda x, y : x != y, ('one_to_nine', 'eight_bits'))
+
+        # Produce one valid solution
+        rand_obj.randomize()
+
+        # Random variables are now accessible as member variables
+        print(rand_obj.one_to_nine)
+        print(rand_obj.eight_bits)
     '''
 
-    def __init__(self, random, *, max_iterations=MAX_ITERATIONS):
-        '''
-        seed:            What seed to use for randomisation.
-        max_iterations:  The maximum number of attempts to solve a problem before giving up.
-        '''
-        # Prefix 'internal use' variables with '_', as randomised results are populated to the class
+    def __init__(self, random: Random, *, max_iterations: int=MAX_ITERATIONS) -> None:
+        # Prefix 'internal use' variables with '_', as randomized results are populated to the class
         self._random = random
         self._random_vars = {}
         self._constraints = []
@@ -301,57 +462,132 @@ class RandObj:
         self._max_iterations = max_iterations
         self._naive_solve = True
 
-    def set_naive_solve(self, naive: bool):
+    def set_naive_solve(self, naive: bool) -> None:
         '''
-        Disable/enable naive solving step, i.e. randomising and checking constraints.
+        Disable/enable naive solving step, i.e. randomizing and checking constraints.
         For some problems, it is more expedient to skip this step and go straight to
         a MultiVarProblem.
+
+        :param naive: ``True`` if naive solve should be used, ``False`` otherwise.
+        :return: ``None``
         '''
         self._naive_solve = naive
 
-    def add_rand_var(self, name, domain=None, bits=None, fn=None, args=None, constraints=None, order=0):
+    def add_rand_var(
+        self,
+        name: str,
+        *,
+        domain: Optional[Domain]=None,
+        bits: Optional[int]=None,
+        fn: Optional[Callable]=None,
+        args: Optional[tuple]=None,
+        constraints: Optional[Iterable[Constraint]]=None,
+        max_iterations: int=MAX_ITERATIONS,
+        order: int =0,
+    ) -> None:
         '''
         Add a random variable to the object.
+        Exactly one of ``domain``, ``bits``, or ``fn`` (optionally with ``args``) must be provided
+        to determine how to randomize.
 
-        name:   The name of the variable.
+        :param name: The name of this random variable.
+        :param order: The solution order for this variable with respect to other variables.
+        :param domain: The possible values for this random variable, expressed either
+            as a ``range``, or as an iterable (e.g. ``list``, ``tuple``) of possible values.
+            Mutually exclusive with ``bits`` and ``fn``.
+        :param bits: Specifies the possible values of this variable in terms of a width
+            in bits. E.g. ``bits=32`` signifies this variable can be ``0 <= x < 1 << 32``.
+            Mutually exclusive with ``domain`` and ``fn``.
+        :param fn: Specifies a function to call that will provide the value of this random
+            variable.
+            Mutually exclusive with ``domain`` and ``bits``.
+        :param args: Arguments to pass to the function specified in ``fn``.
+            If ``fn`` is not used, ``args`` must not be used.
+        :param constraints: List or tuple of constraints that apply to this random variable.
+        :return: ``None``
+        :raise AssertionError: If inputs are not valid.
 
-        Exactly one of domain, bits, or fn (optionally with args) must be provided to determine
-        how to randomise.
+        :example:
 
-        domain:       range, list, tuple or dictionary, specifying possible values to randomly select from.
-        bits:         int specifying a bit width to randomise.
-        fn:           The function to be called to supply the value of the variable. Typically from Random.
-        args:         A tuple of arguments supplied to the function fn.
-        constraints:  List of constraints applying to a single variable. Arbitrary function accepting one argument that returns True/False.
-        order:        Index to determine what order to resolve the variables.
+        .. code-block:: python
+
+            # Create a random object based on a random generator
+            rand_generator = Random(seed=0)
+            rand_obj = RandObj(rand_generator)
+
+            # Add a variable which can be 1, 3, 5, 7 or 11
+            rand_obj.add_rand_var('prime', domain=(1, 3, 5, 7, 11))
+
+            # Add a variable which can be any number between 3 and 13, except 7
+            rand_obj.add_rand_var('not_7', domain=range(3, 14), constraints=(lambda x: x != 7,))
+
+            # Add a variable which is 12 bits wide and can't be zero
+            rand_obj.add_rand_var('twelve_bits', bits=12, constraints=(lambda x: x != 0,))
+
+            # Add a variable whose value is generated by calling a function
+            def my_fn():
+                return rand_generator.randrange(10)
+            rand_obj.add_rand_var('fn_based', fn=my_fn)
+
+            # Add a variable whose value is generated by calling a function that takes arguments
+            def my_fn(factor):
+                return factor * rand_generator.randrange(10)
+            rand_obj.add_rand_var('fn_based_with_args', fn=my_fn, args=(2,))
         '''
         # Check this is a valid name
         assert name not in self.__dict__, f"random variable name {name} is not valid, already exists in object"
         assert name not in self._random_vars, f"random variable name {name} is not valid, already exists in random variables"
         self._random_vars[name] = RandVar(parent=self, name=name, domain=domain, bits=bits, fn=fn, args=args, constraints=constraints, order=order)
 
-    def add_multi_var_constraint(self, _constraint, variables):
+    def add_multi_var_constraint(self, multi_var_constraint: Constraint, variables: Iterable[str]):
         '''
-        Add an aribtrary constraint to more than one variable.
+        Add an aribtrary constraint that applies to more than one variable.
 
-        _constraint:  A function (or callable) that accepts the variables as an argument and returns either True or False.
-                      If the function returns True when passed the variables, the constraint is satisfied.
-        variables:    A tuple/list of variables affected by this constraint.
+        :param multi_var_constraint: A function (or callable) that accepts the random variables listed in ``variables``
+            as argument(s) and returns either ``True`` or ``False``.
+            If the function returns ``True`` when passed the variables, the constraint is satisfied.
+        :param variables: A tuple/list of variables affected by this constraint. The order matters,
+            this order will be preserved when passing variables into the constraint.
+        :return: ``None``
+        :raises AssertionError: If any member of ``variables`` is not a valid random variable.
+
+        :example:
+
+        .. code-block:: python
+
+            # Assume we have a RandObj called 'randobj', with random variables a, b and c
+            # Add a constraint that a, b and c must be different values
+            def not_equal(x, y, z):
+                return (x != y) and (y != z) and (x != z)
+            randobj.add_multi_var_constraint(not_equal, ('a', 'b', 'c'))
+
+            # Add a constraint that a is less than b
+            randobj.add_multi_var_constraint(lambda x, y: x < y, ('a', 'b'))
+
+            # Add a constraint that c must be more than double a but less than double b
+            randobj.multi_var_constraint(lambda a, b, c: (a * 2) < c < (b * 2), ('a', 'b', 'c'))
         '''
         for var in variables:
             assert var in self._random_vars, f"Variable {var} was not in the set of random variables!"
             self._constrained_vars.add(var)
-        self._constraints.append((_constraint, variables))
+        self._constraints.append((multi_var_constraint, variables))
 
-    def pre_randomize(self):
+    def pre_randomize(self) -> None:
         '''
-        Called by randomize before randomizing variables. Can be overridden to do something.
-        '''
+        Called by :func:`randomize` before randomizing variables. Can be overridden to do something.
 
-
-    def randomize(self):
+        :return: ``None``
         '''
-        Randomizes all random variables (in self._random_vars), applying constraints provided (in self._constraints).
+        pass
+
+    def randomize(self) -> None:
+        '''
+        Randomizes all random variables, applying all constraints provided.
+        After calling this for the firs time, random variables are
+        accessible as member variables.
+
+        :return: None
+        :raises RuntimeError: If no solution is found within defined limits.
         '''
         self.pre_randomize()
 
@@ -360,7 +596,7 @@ class RandObj:
         for name, random_var in self._random_vars.items():
             result[name] = random_var.randomize()
 
-        # If there are constraints, first try just to solve naively by randomising the values.
+        # If there are constraints, first try just to solve naively by randomizing the values.
         # This will be faster than constructing a MultiVarProblem if the constraints turn out
         # to be trivial. Only try this a few times so as not to waste time.
         constraints_satisfied = len(self._constraints) == 0
@@ -382,7 +618,7 @@ class RandObj:
                     solution = self._random.choice(solutions)
                     result.update(solution)
                 else:
-                    # No solution found, re-randomise and try again
+                    # No solution found, re-randomize and try again
                     for var in self._constrained_vars:
                         result[var] = self._random_vars[var].randomize()
                     attempts += 1
@@ -393,28 +629,37 @@ class RandObj:
             multi_var_problem = MultiVarProblem(self, {name: var for name, var in self._random_vars.items() if name in self._constrained_vars}, self._constraints)
             result.update(multi_var_problem.solve())
 
-        # Update this object such that the results of randomisation are available as member variables
+        # Update this object such that the results of randomization are available as member variables
         self.__dict__.update(result)
 
         self.post_randomize()
 
-    def post_randomize(self):
+    def post_randomize(self) -> None:
         '''
-        Called by randomize after randomizing variables. Can be overridden to do something.
-        '''
+        Called by :func:`randomize` after randomizing variables. Can be overridden to do something.
 
-    def get_results(self):
+        :return: ``None``
+        '''
+        pass
+
+    def get_results(self) -> Dict[str, Any]:
         '''
         Returns a dictionary of the results from the most recent randomization.
         This is mainly provided for testing purposes.
 
         Note that individual variables can be accessed as member variables of
         a RandObj instance once randomized, e.g.
-        rand = Random(0)
-        randobj = RandObj(rand)
-        randobj.add_rand_var('a', domain=range(10))
-        randobj.randomize()
-        print(randobj.a)
+
+        .. code-block:: python
+
+            rand = Random(0)
+            randobj = RandObj(rand)
+            randobj.add_rand_var('a', domain=range(10))
+            randobj.randomize()
+            print(randobj.a)
+
+        :return: dictionary of the results from the most recent randomization.
+        :raises RuntimeError: if :func:`randomize` hasn't been called first.
         '''
         try:
             # Return a new dict object rather than a reference to this object's __dict__

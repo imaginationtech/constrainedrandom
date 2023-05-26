@@ -24,6 +24,8 @@ class ldInstr(RandObj):
     def __init__(self, random, *args, **kwargs):
         super().__init__(random, *args, **kwargs)
 
+        self.opcode = None
+
         self.add_rand_var('src0', bits=5, order=0)
         def read_model_for_src0_value():
             # Pretend getter for src0 current value
@@ -42,6 +44,9 @@ class ldInstr(RandObj):
             return (address & 3 == 0) and (address < 0xffffffff)
         self.add_multi_var_constraint(sum_src0_imm0, ('src0_value', 'imm0'))
 
+    def post_randomize(self):
+        self.opcode = self.get_opcode()
+
     def get_opcode(self):
         opcode = self.ENC
         opcode = opcode | self.imm0
@@ -58,4 +63,4 @@ if __name__ == "__main__":
     # Produce 5 random valid opcodes for this load instruction
     for _ in range(5):
         ld_instr.randomize()
-        print(hex(ld_instr.get_opcode()))
+        print(hex(ld_instr.opcode))
