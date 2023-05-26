@@ -23,12 +23,12 @@ Internal classes
 
 These classes are internal-facing and the design can change if required.
 
-.. autoclass:: constrainedrandom.RandVar
+.. autoclass:: constrainedrandom.internal.randvar.RandVar
    :members:
    :undoc-members:
    :show-inheritance:
 
-.. autoclass:: constrainedrandom.MultiVarProblem
+.. autoclass:: constrainedrandom.internal.multivar.MultiVarProblem
    :members:
    :undoc-members:
    :show-inheritance:
