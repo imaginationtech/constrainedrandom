@@ -215,14 +215,22 @@ class MultiVarProblem:
 
         # Try to solve sparsely first
         sparsities = [1, 10, 100, 1000]
+        # The worst-case value of the number of iterations for one sparsity level is:
+        # iterations_per_sparsity * iterations_per_attempt
+        # because of the call to solve_groups hitting iterations_per_attempt.
+        # Failing individual solution attempts speeds up some problems greatly,
+        # this can be thought of as pruning explorations of the state tree.
+        # So, reduce iterations_per_attempt by an order of magnitude.
+        iterations_per_sparsity = self.max_iterations
+        iterations_per_attempt = self.max_iterations // 10
         for sparsity in sparsities:
-            for _ in range(self.max_iterations // 10):
-                solution = self.solve_groups(groups, self.max_iterations // 10, sparsity)
+            for _ in range(iterations_per_sparsity):
+                solution = self.solve_groups(groups, iterations_per_attempt, sparsity)
                 if solution is not None and len(solution) > 0:
                     return solution
 
         # Try 'thorough' method - no backup plan if this fails
-        solution = self.solve_groups(groups)
+        solution = self.solve_groups(groups, self.max_iterations)
         if solution is None:
             raise RuntimeError("Could not solve problem.")
         return solution
