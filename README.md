@@ -15,7 +15,7 @@ $ pip install constrainedrandom
 
 ## Documentation
 
-`TODO` add link to readthedocs
+[Read the docs here](https://constrainedrandom.readthedocs.io/en/latest/)
 
 To build the documentation yourself:
 ```bash
