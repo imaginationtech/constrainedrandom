@@ -3,7 +3,7 @@
 
 import constraint
 from collections import defaultdict
-from typing import Any, Dict, Iterable, Optional, TYPE_CHECKING, Union
+from typing import Any, Dict, Iterable, List, Optional, TYPE_CHECKING, Union
 
 from constrainedrandom import utils
 
@@ -46,7 +46,7 @@ class MultiVarProblem:
         self.max_iterations = max_iterations
         self.max_domain_size = max_domain_size
 
-    def determine_order(self) -> list[list['RandVar']]:
+    def determine_order(self) -> List[List['RandVar']]:
         '''
         Chooses an order in which to resolve the values of the variables.
         Used internally.
@@ -84,7 +84,7 @@ class MultiVarProblem:
 
     def solve_groups(
         self,
-        groups: list[list['RandVar']],
+        groups: List[List['RandVar']],
         max_iterations:int,
         solutions_per_group: Optional[int]=None,
     ) -> Union[Dict[str, Any], None]:
