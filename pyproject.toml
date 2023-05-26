@@ -16,7 +16,7 @@ authors = [
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
-    "Topic :: Scientific/Engineering :: Verification",
+    "Topic :: Scientific/Engineering",
 ]
 dependencies = [
     "python-constraint>=1.4.0",
