@@ -4,8 +4,7 @@
 import constraint
 from typing import Any, Callable, Dict, Iterable, Optional
 
-from constrainedrandom import types
-from constrainedrandom.internal import constants
+from constrainedrandom import utils
 from constrainedrandom.internal.multivar import MultiVarProblem
 from constrainedrandom.internal.randvar import RandVar
 from constrainedrandom.random import Random
@@ -52,8 +51,8 @@ class RandObj:
         self,
         random: Random,
         *,
-        max_iterations: int=constants.MAX_ITERATIONS,
-        max_domain_size: int=constants.CONSTRAINT_MAX_DOMAIN_SIZE,
+        max_iterations: int=utils.MAX_ITERATIONS,
+        max_domain_size: int=utils.CONSTRAINT_MAX_DOMAIN_SIZE,
     ) -> None:
         # Prefix 'internal use' variables with '_', as randomized results are populated to the class
         self._random = random
@@ -79,11 +78,11 @@ class RandObj:
         self,
         name: str,
         *,
-        domain: Optional[types.Domain]=None,
+        domain: Optional[utils.Domain]=None,
         bits: Optional[int]=None,
         fn: Optional[Callable]=None,
         args: Optional[tuple]=None,
-        constraints: Optional[Iterable[types.Constraint]]=None,
+        constraints: Optional[Iterable[utils.Constraint]]=None,
         order: int=0,
     ) -> None:
         '''
@@ -151,7 +150,7 @@ class RandObj:
             max_domain_size=self._max_domain_size,
         )
 
-    def add_multi_var_constraint(self, multi_var_constraint: types.Constraint, variables: Iterable[str]):
+    def add_multi_var_constraint(self, multi_var_constraint: utils.Constraint, variables: Iterable[str]):
         '''
         Add an aribtrary constraint that applies to more than one variable.
 

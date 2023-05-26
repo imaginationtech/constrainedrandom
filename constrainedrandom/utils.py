@@ -12,3 +12,9 @@ Domain = Union[Iterable[Any], range, Dist]
 
 # Constraint type
 Constraint = Callable[..., bool]
+
+# The default maximum iterations before giving up on any randomization problem
+MAX_ITERATIONS = 100
+
+# The default largest domain size to use with the constraint library
+CONSTRAINT_MAX_DOMAIN_SIZE = 1 << 10

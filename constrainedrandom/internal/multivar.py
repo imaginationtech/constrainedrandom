@@ -5,7 +5,7 @@ import constraint
 from collections import defaultdict
 from typing import Any, Dict, Iterable, Optional, TYPE_CHECKING, Union
 
-from constrainedrandom import types
+from constrainedrandom import utils
 
 if TYPE_CHECKING:
     from constrainedrandom.randobj import RandObj
@@ -35,7 +35,7 @@ class MultiVarProblem:
         self,
         parent: 'RandObj',
         vars: Dict[str, 'RandVar'],
-        constraints: Iterable[types.Constraint],
+        constraints: Iterable[utils.Constraint],
         max_iterations: int,
         max_domain_size: int,
     ) -> None:

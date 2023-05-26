@@ -5,7 +5,7 @@ import random
 
 from typing import Any
 
-from constrainedrandom import types
+from constrainedrandom import utils
 
 
 class Random(random.Random):
@@ -43,7 +43,7 @@ class Random(random.Random):
     def __init__(self, seed: int) -> None:
         super().__init__(x=seed)
 
-    def weighted_choice(self, choices_dict: types.Dist) -> Any:
+    def weighted_choice(self, choices_dict: utils.Dist) -> Any:
         '''
         Wrapper around ``random.choices``, allowing the user to specify weights in a dictionary.
 
@@ -60,7 +60,7 @@ class Random(random.Random):
         '''
         return self.choices(tuple(choices_dict.keys()), weights=tuple(choices_dict.values()))
 
-    def dist(self, dist_dict: types.Dist) -> Any:
+    def dist(self, dist_dict: utils.Dist) -> Any:
         '''
         Random distribution. As :func:`weighted_choice`, but allows ``range`` to be used as
         a key to the dictionary, which if chosen is then evaluated as a random range.

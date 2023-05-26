@@ -5,7 +5,7 @@ import constraint
 from functools import partial
 from typing import Any, Callable, Iterable, Optional, TYPE_CHECKING
 
-from constrainedrandom import types
+from constrainedrandom import utils
 
 if TYPE_CHECKING:
     from constrainedrandom.randobj import RandObj
@@ -42,11 +42,11 @@ class RandVar:
         name: str,
         order: int,
         *,
-        domain: Optional[types.Domain]=None,
+        domain: Optional[utils.Domain]=None,
         bits: Optional[int]=None,
         fn: Optional[Callable]=None,
         args: Optional[tuple]=None,
-        constraints: Optional[Iterable[types.Constraint]]=None,
+        constraints: Optional[Iterable[utils.Constraint]]=None,
         max_iterations: int,
         max_domain_size:int,
     ) -> None:
