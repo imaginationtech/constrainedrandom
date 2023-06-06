@@ -8,6 +8,7 @@ import unittest
 import sys
 
 from argparse import ArgumentParser
+from enum import Enum, IntEnum
 
 from constrainedrandom import Random, RandObj
 from examples.ldinstr import ldInstr
@@ -68,6 +69,15 @@ class RandObjTests(unittest.TestCase):
         '''
         Test all basic single random variable features
         '''
+
+        class MyEnum(Enum):
+            A = 'a'
+            B = 'b'
+
+        class MyIntEnum(IntEnum):
+            ONE = 1
+            TWO = 2
+
         def get_randobj(seed):
             r = RandObj(Random(seed))
             r.add_rand_var("foo", domain=range(100))
@@ -80,6 +90,8 @@ class RandObjTests(unittest.TestCase):
             def custom_fn(arg):
                 return arg + 1
             r.add_rand_var("joe", fn=custom_fn, args=(1,))
+            r.add_rand_var("enum", domain=MyEnum)
+            r.add_rand_var("int_enum", domain=MyIntEnum)
             return r
 
         def check(results):
@@ -92,6 +104,8 @@ class RandObjTests(unittest.TestCase):
                 self.assertIn(result['bob'], (0,1))
                 self.assertIn(result['dan'], (0,1,2,4))
                 self.assertEqual(result['joe'], 2)
+                self.assertIn(result['enum'], (MyEnum.A, MyEnum.B))
+                self.assertIn(result['int_enum'], (1, 2))
 
         self.randobj_test(get_randobj, 10000, check)
 

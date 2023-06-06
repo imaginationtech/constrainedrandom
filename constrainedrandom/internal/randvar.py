@@ -78,12 +78,24 @@ class RandVar:
             self.randomizer = partial(self.random.getrandbits, self.bits)
             self.domain = range(0, 1 << self.bits)
         else:
-            # If we are provided a sufficiently small domain and we have constraints, simply construct a
-            # constraint solution problem instead.
+            # Handle possible types.
             is_range = isinstance(self.domain, range)
-            is_list = isinstance(self.domain, list) or isinstance(self.domain, tuple)
+            is_list_or_tuple = isinstance(self.domain, list) or isinstance(self.domain, tuple)
             is_dict = isinstance(self.domain, dict)
-            if self.check_constraints and len(self.domain) < self.max_domain_size and (is_range or is_list):
+            # Range, list and tuple are handled nicely by constraint. Other Iterables may not be,
+            # e.g. enum.Enum isn't, despite being an Iterable.
+            is_iterable = isinstance(self.domain, Iterable)
+            if is_iterable and not (is_range or is_list_or_tuple or is_dict):
+                # Convert non-dict iterables to a tuple as we don't expect them to need to be mutable,
+                # and tuple ought to be slightly more performant than list.
+                try:
+                    self.domain = tuple(self.domain)
+                except TypeError:
+                    raise TypeError(f'RandVar was passed a domain of bad type - {domain}. This was an Iterable but could not be converted to tuple.')
+                is_list_or_tuple = True
+            if self.check_constraints and (is_range or is_list_or_tuple) and len(self.domain) < self.max_domain_size:
+                # If we are provided a sufficiently small domain and we have constraints, simply construct a
+                # constraint solution problem instead.
                 problem = constraint.Problem()
                 problem.addVariable(self.name, self.domain)
                 for con in self.constraints:
@@ -96,12 +108,12 @@ class RandVar:
                 self.check_constraints = False
             elif is_range:
                 self.randomizer = partial(self.random.randrange, self.domain.start, self.domain.stop)
-            elif is_list:
+            elif is_list_or_tuple:
                 self.randomizer = partial(self.random.choice, self.domain)
             elif is_dict:
                 self.randomizer = partial(self.random.dist, self.domain)
             else:
-                raise TypeError(f'RandVar was passed a domain of a bad type - {self.domain}. Domain should be a range, list, tuple or dictionary.')
+                raise TypeError(f'RandVar was passed a domain of a bad type - {self.domain}. Domain should be a range, list, tuple, dictionary or other Iterable.')
 
     def randomize(self) -> Any:
         '''
