@@ -3,20 +3,21 @@
 
 import constraint
 from functools import partial
-from typing import Any, Callable, Iterable, Optional, TYPE_CHECKING
+from typing import Any, Callable, Iterable, Optional, Union
+import random
 
-from constrainedrandom import utils
-
-if TYPE_CHECKING:
-    from constrainedrandom.randobj import RandObj
+from .. import utils
+from ..random import dist
 
 
 class RandVar:
     '''
-    Randomizable variable. For internal use with RandObj.
+    Randomizable variable. For internal use with :class:`RandObj`.
 
-    :param parent: The :class:`RandObj` instance that owns this instance.
     :param name: The name of this random variable.
+    :param _random: Provides the random generator object this instance will use to
+        create random values. Either provide an existing instance of a :class:`Random`,
+        or leave as ``None`` to use the global Python `random` package.
     :param order: The solution order for this variable with respect to other variables.
     :param domain: The possible values for this random variable, expressed either
         as a ``range``, or as an iterable (e.g. ``list``, ``tuple``) of possible values.
@@ -38,10 +39,10 @@ class RandVar:
     '''
 
     def __init__(self,
-        parent: 'RandObj',
         name: str,
-        order: int,
         *,
+        _random: Union[random.Random, None]=None,
+        order: int=0,
         domain: Optional[utils.Domain]=None,
         bits: Optional[int]=None,
         fn: Optional[Callable]=None,
@@ -50,8 +51,7 @@ class RandVar:
         max_iterations: int,
         max_domain_size:int,
     ) -> None:
-        self.parent = parent
-        self.random = self.parent._random
+        self._random = _random
         self.name = name
         self.order = order
         self.max_iterations = max_iterations
@@ -75,7 +75,7 @@ class RandVar:
             else:
                 self.randomizer = self.fn
         elif self.bits is not None:
-            self.randomizer = partial(self.random.getrandbits, self.bits)
+            self.randomizer = partial(self._get_random().getrandbits, self.bits)
             self.domain = range(0, 1 << self.bits)
         else:
             # Handle possible types.
@@ -103,17 +103,30 @@ class RandVar:
                 # Produces a list of dictionaries
                 solutions = problem.getSolutions()
                 def solution_picker(solns):
-                    return self.random.choice(solns)[self.name]
+                    return self._get_random().choice(solns)[self.name]
                 self.randomizer = partial(solution_picker, solutions)
                 self.check_constraints = False
             elif is_range:
-                self.randomizer = partial(self.random.randrange, self.domain.start, self.domain.stop)
+                self.randomizer = partial(self._get_random().randrange, self.domain.start, self.domain.stop)
             elif is_list_or_tuple:
-                self.randomizer = partial(self.random.choice, self.domain)
+                self.randomizer = partial(self._get_random().choice, self.domain)
             elif is_dict:
-                self.randomizer = partial(self.random.dist, self.domain)
+                self.randomizer = partial(dist, self.domain, self._get_random())
             else:
                 raise TypeError(f'RandVar was passed a domain of a bad type - {self.domain}. Domain should be a range, list, tuple, dictionary or other Iterable.')
+
+    def _get_random(self) -> random.Random:
+        '''
+        Internal function to get the appropriate randomization object.
+
+        We can't store the package ``random`` in a member variable as this
+        prevents pickling.
+
+        :return: The appropriate random generator.
+        '''
+        if self._random is None:
+            return random
+        return self._random
 
     def randomize(self) -> Any:
         '''

@@ -2,12 +2,12 @@
 # Copyright (c) 2023 Imagination Technologies Ltd. All Rights Reserved
 
 import constraint
-from typing import Any, Callable, Dict, Iterable, Optional
+import random
+from typing import Any, Callable, Dict, Iterable, Optional, Union
 
-from constrainedrandom import utils
-from constrainedrandom.internal.multivar import MultiVarProblem
-from constrainedrandom.internal.randvar import RandVar
-from constrainedrandom.random import Random
+from . import utils
+from .internal.multivar import MultiVarProblem
+from .internal.randvar import RandVar
 
 
 class RandObj:
@@ -16,8 +16,9 @@ class RandObj:
     Contains any number of random variables and constraints.
     Randomizes to produce a valid solution for those variables and constraints.
 
-    :param random: An instance of :class:`Random`, which controls the
-        seeding and random generation for this class.
+    :param _random: An instance of ``random.Random``, which controls the
+        seeding and random generation for this class. If passed none, use the global
+        Python random package.
     :param max_iterations: The maximum number of failed attempts to solve the randomization
         problem before giving up.
     :param max_domain_size: The maximum size of domain that a constraint satisfaction problem
@@ -27,13 +28,15 @@ class RandObj:
     :example:
 
     .. code-block:: python
+        import random
+        from constrainedrandom import RandObj
 
-        # Create a random object based on a random generator
-        rand_generator = Random(seed=0)
+        # Create a random object based on a random generator with seed 0
+        rand_generator = random.Random(0)
         rand_obj = RandObj(rand_generator)
 
         # Add some random variables
-        rand_obj.add_rand_var('one_to_nine', domain=range(10))
+        rand_obj.add_rand_var('one_to_nine', domain=range(1, 10))
         rand_obj.add_rand_var('eight_bits', bits=8, constraints=(lambda x : x != 0))
 
         # Add a multi-variable constraint
@@ -49,19 +52,31 @@ class RandObj:
 
     def __init__(
         self,
-        random: Random,
-        *,
+        _random: Union[random.Random, None]=None,
         max_iterations: int=utils.MAX_ITERATIONS,
         max_domain_size: int=utils.CONSTRAINT_MAX_DOMAIN_SIZE,
     ) -> None:
         # Prefix 'internal use' variables with '_', as randomized results are populated to the class
-        self._random = random
+        self._random = _random
         self._random_vars = {}
         self._constraints = []
         self._constrained_vars = set()
         self._max_iterations = max_iterations
         self._max_domain_size =max_domain_size
         self._naive_solve = True
+
+    def _get_random(self) -> random.Random:
+        '''
+        Internal function to get the appropriate randomization object.
+
+        We can't store the package ``random`` in a member variable as this
+        prevents pickling.
+
+        :return: The appropriate random generator.
+        '''
+        if self._random is None:
+            return random
+        return self._random
 
     def set_naive_solve(self, naive: bool) -> None:
         '''
@@ -111,8 +126,8 @@ class RandObj:
 
         .. code-block:: python
 
-            # Create a random object based on a random generator
-            rand_generator = Random(seed=0)
+            # Create a random object based on a random generator with seed 0
+            rand_generator = random.Random(0)
             rand_obj = RandObj(rand_generator)
 
             # Add a variable which can be 1, 3, 5, 7 or 11
@@ -138,14 +153,14 @@ class RandObj:
         assert name not in self.__dict__, f"random variable name {name} is not valid, already exists in object"
         assert name not in self._random_vars, f"random variable name {name} is not valid, already exists in random variables"
         self._random_vars[name] = RandVar(
-            parent=self,
             name=name,
+            _random=self._random,
+            order=order,
             domain=domain,
             bits=bits,
             fn=fn,
             args=args,
             constraints=constraints,
-            order=order,
             max_iterations=self._max_iterations,
             max_domain_size=self._max_domain_size,
         )
@@ -226,7 +241,7 @@ class RandObj:
                 if len(solutions) > 0:
                     # At least one solution was found, all is well
                     constraints_satisfied = True
-                    solution = self._random.choice(solutions)
+                    solution = self._get_random().choice(solutions)
                     result.update(solution)
                 else:
                     # No solution found, re-randomize and try again
@@ -269,8 +284,7 @@ class RandObj:
 
         .. code-block:: python
 
-            rand = Random(0)
-            randobj = RandObj(rand)
+            randobj = RandObj()
             randobj.add_rand_var('a', domain=range(10))
             randobj.randomize()
             print(randobj.a)

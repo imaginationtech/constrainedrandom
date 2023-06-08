@@ -10,13 +10,12 @@ import timeit
 import sys
 
 from argparse import ArgumentParser
+from random import Random
 
-from constrainedrandom import Random
 from benchmarks.pyvsc.basic import vsc_basic, cr_basic
 from benchmarks.pyvsc.in_keyword import vsc_in, cr_in, cr_in_order
 from benchmarks.pyvsc.ldinstr import vsc_ldinstr
 from examples.ldinstr import ldInstr
-
 
 
 TEST_LENGTH_MULTIPLIER = 1

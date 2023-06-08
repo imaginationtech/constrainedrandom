@@ -9,8 +9,9 @@ import sys
 
 from argparse import ArgumentParser
 from enum import Enum, IntEnum
+from random import Random
 
-from constrainedrandom import Random, RandObj
+from constrainedrandom import RandObj
 from examples.ldinstr import ldInstr
 
 

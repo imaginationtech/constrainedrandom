@@ -1,7 +1,9 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2022 Imagination Technologies Ltd. All Rights Reserved
 
-from constrainedrandom import RandObj, Random
+from random import Random
+
+from constrainedrandom import RandObj
 
 class ldInstr(RandObj):
     '''
@@ -21,8 +23,8 @@ class ldInstr(RandObj):
     '''
     ENC = 0xfa800000
 
-    def __init__(self, random, *args, **kwargs):
-        super().__init__(random, *args, **kwargs)
+    def __init__(self, _random=None):
+        super().__init__(_random=_random)
 
         self.opcode = None
 
@@ -58,8 +60,8 @@ class ldInstr(RandObj):
 
 if __name__ == "__main__":
     # Use a seed of 0 so our results are repeatable
-    random = Random(0)
-    ld_instr = ldInstr(random)
+    _random = Random(0)
+    ld_instr = ldInstr(_random=_random)
     # Produce 5 random valid opcodes for this load instruction
     for _ in range(5):
         ld_instr.randomize()

@@ -5,11 +5,11 @@ import constraint
 from collections import defaultdict
 from typing import Any, Dict, Iterable, List, Optional, TYPE_CHECKING, Union
 
-from constrainedrandom import utils
+from .. import utils
 
 if TYPE_CHECKING:
-    from constrainedrandom.randobj import RandObj
-    from constrainedrandom.internal.randvar import RandVar
+    from ..randobj import RandObj
+    from ..internal.randvar import RandVar
 
 
 class MultiVarProblem:
