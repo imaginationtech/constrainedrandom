@@ -128,25 +128,34 @@ class RandVar:
             return random
         return self._random
 
-    def randomize(self) -> Any:
+    def randomize(self, temp_constraints:Union[Iterable[utils.Constraint], None]=None) -> Any:
         '''
         Returns a random value based on the definition of this random variable.
         Does not modify the state of the :class:`RandVar` instance.
 
+        :param temp_constraints: Temporary constraints to apply only for
+            this randomization.
         :return: A randomly generated value, conforming to the definition of
             this random variable, its constraints, etc.
         :raises RuntimeError: When the problem cannot be solved in fewer than
             the allowed number of iterations.
         '''
         value = self.randomizer()
-        value_valid = not self.check_constraints
+        check_constraints = self.check_constraints
+        # Handle temporary constraints. Start with copy of existing constraints,
+        # adding any temporary ones in.
+        constraints = list(self.constraints)
+        if temp_constraints is not None and len(temp_constraints) > 0:
+            check_constraints = True
+            constraints += temp_constraints
+        value_valid = not check_constraints
         iterations = 0
         while not value_valid:
             if iterations == self.max_iterations:
                 raise RuntimeError("Too many iterations, can't solve problem")
             problem = constraint.Problem()
             problem.addVariable(self.name, (value,))
-            for con in self.constraints:
+            for con in constraints:
                 problem.addConstraint(con, (self.name,))
             value_valid = problem.getSolution() is not None
             if not value_valid:

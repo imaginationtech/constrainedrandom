@@ -23,7 +23,7 @@ class RandObjTests(unittest.TestCase):
     Container for unit tests for constrainedrandom.RandObj
     '''
 
-    def randomize_and_time(self, randobj, iterations):
+    def randomize_and_time(self, randobj, iterations, with_constraints=None):
         '''
         Call randobj.randomize() iterations times, time it, print performance stats,
         return the results.
@@ -32,7 +32,10 @@ class RandObjTests(unittest.TestCase):
         time_taken = 0
         for _ in range(iterations):
             start_time = timeit.default_timer()
-            randobj.randomize()
+            if with_constraints is not None:
+                randobj.randomize(with_constraints)
+            else:
+                randobj.randomize()
             end_time = timeit.default_timer()
             time_taken += end_time - start_time
             # Extract the results
@@ -41,7 +44,7 @@ class RandObjTests(unittest.TestCase):
         print(f'{self._testMethodName} took {time_taken:.4g}s for {iterations} iterations ({hz:.1f}Hz)')
         return results
 
-    def randobj_test(self, randobj_getter, iterations, check):
+    def randobj_test(self, randobj_getter, iterations, check, with_constraints=None):
         '''
         Reusable test function to randomize a RandObj for a number of iterations and perform checks.
 
@@ -54,15 +57,15 @@ class RandObjTests(unittest.TestCase):
         iterations *= TEST_LENGTH_MULTIPLIER
         # Test with seed 0
         randobj = randobj_getter(0)
-        results = self.randomize_and_time(randobj, iterations)
+        results = self.randomize_and_time(randobj, iterations, with_constraints)
         check(results)
         # Test again with seed 0, ensuring results are the same
         randobj0 = randobj_getter(0)
-        results0 = self.randomize_and_time(randobj0, iterations)
+        results0 = self.randomize_and_time(randobj0, iterations, with_constraints)
         self.assertEqual(results, results0, "Non-determinism detected, results were not equal")
         # Test with seed 1, ensuring results are different
         randobj1 = randobj_getter(1)
-        results1 = self.randomize_and_time(randobj1, iterations)
+        results1 = self.randomize_and_time(randobj1, iterations, with_constraints)
         check(results1)
         self.assertNotEqual(results, results1, "Results were the same for two different seeds, check testcase.")
 
@@ -260,6 +263,66 @@ class RandObjTests(unittest.TestCase):
                 self.assertEqual(address & 3, 0)
 
         self.randobj_test(get_randobj, 100, check)
+
+    def test_temp_constraint(self):
+        '''
+        Test using a simple temporary constraint.
+        '''
+        def get_randobj(seed):
+            r = RandObj(Random(seed))
+            r.add_rand_var('a', domain=range(10))
+            return r
+
+        def check(results):
+            for result in results:
+                self.assertIn(result['a'], range(10))
+
+        # Test with no temp constraint
+        self.randobj_test(get_randobj, 1000, check)
+
+        def tmp_check(results):
+            for result in results:
+                self.assertIn(result['a'], range(5))
+
+        def tmp_constraint(a):
+            return a < 5
+
+        # Test with temp constraint
+        self.randobj_test(get_randobj, 1000, tmp_check, [(tmp_constraint, ('a',))])
+
+    def test_temp_mutli_constraint(self):
+        '''
+        Test using temporary multi-variable constraints.
+        '''
+        def get_randobj(seed):
+            r = RandObj(Random(seed))
+            r.add_rand_var('a', domain=range(10))
+            r.add_rand_var('b', domain=range(100))
+            return r
+
+        def check(results):
+            for result in results:
+                self.assertIn(result['a'], range(10))
+                self.assertIn(result['b'], range(100))
+
+        # Test with no temp constraint
+        self.randobj_test(get_randobj, 1000, check)
+
+        def tmp_check(results):
+            # Do normal checks
+            check(results)
+            # Also check the temp constraint is followed
+            for result in results:
+                self.assertLess(result['a'] * result['b'], 200)
+
+        def a_lt_5(a):
+            return a < 5
+
+        def a_mul_b_lt_200(a, b):
+            return a * b < 200
+
+        # Test with temp constraints
+        self.randobj_test(get_randobj, 1000, tmp_check, [(a_lt_5, ('a',)), (a_mul_b_lt_200, ('a', 'b'))])
 
 
 def parse_args():

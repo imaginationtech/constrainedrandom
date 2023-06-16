@@ -3,7 +3,8 @@
 
 import constraint
 import random
-from typing import Any, Callable, Dict, Iterable, Optional, Union
+from collections import defaultdict
+from typing import Any, Callable, Dict, Iterable, Optional, Tuple, Union
 
 from . import utils
 from .internal.multivar import MultiVarProblem
@@ -206,26 +207,50 @@ class RandObj:
         '''
         pass
 
-    def randomize(self) -> None:
+    def randomize(self, with_constraints: Iterable[Tuple[utils.Constraint, Iterable[str]]]=None) -> None:
         '''
         Randomizes all random variables, applying all constraints provided.
-        After calling this for the firs time, random variables are
+        After calling this for the first time, random variables are
         accessible as member variables.
 
         :return: None
+        :param with_constraints: Temporary constraints for this randomization only.
+            List of tuples, consisting of a constraint function and an iterable
+            containing the variables it applies to.
         :raises RuntimeError: If no solution is found within defined limits.
         '''
         self.pre_randomize()
 
         result = {}
 
+        # Copy always-on constraints, ready to add any temporary ones
+        constraints = list(self._constraints)
+        constrained_vars = set(self._constrained_vars)
+
+        # Process temporary constraints
+        tmp_single_var_constraints = defaultdict(list)
+        if with_constraints is not None:
+            for constr, vars in with_constraints:
+                assert isinstance(vars, Iterable), \
+                    "with_constraints should specify a list of tuples of (constraint, Iterable[variables])"
+                assert len(vars) > 0, "Cannot add a constraint that applies to no variables"
+                if len(vars) == 1:
+                    # Single-variable constraint
+                    tmp_single_var_constraints[vars[0]].append(constr)
+                else:
+                    # Multi-variable constraint
+                    constraints.append((constr, vars))
+                    for var in vars:
+                        constrained_vars.add(var)
+
         for name, random_var in self._random_vars.items():
-            result[name] = random_var.randomize()
+            tmp_constraints = tmp_single_var_constraints.get(name, [])
+            result[name] = random_var.randomize(tmp_constraints)
 
         # If there are constraints, first try just to solve naively by randomizing the values.
         # This will be faster than constructing a MultiVarProblem if the constraints turn out
         # to be trivial. Only try this a few times so as not to waste time.
-        constraints_satisfied = len(self._constraints) == 0
+        constraints_satisfied = len(constraints) == 0
         if self._naive_solve:
             attempts = 0
             max = self._max_iterations
@@ -233,9 +258,9 @@ class RandObj:
                 if attempts == max:
                     break
                 problem = constraint.Problem()
-                for var in self._constrained_vars:
+                for var in constrained_vars:
                     problem.addVariable(var, (result[var],))
-                for _constraint, variables in self._constraints:
+                for _constraint, variables in constraints:
                     problem.addConstraint(_constraint, variables)
                 solutions = problem.getSolutions()
                 if len(solutions) > 0:
@@ -245,7 +270,7 @@ class RandObj:
                     result.update(solution)
                 else:
                     # No solution found, re-randomize and try again
-                    for var in self._constrained_vars:
+                    for var in constrained_vars:
                         result[var] = self._random_vars[var].randomize()
                     attempts += 1
 
@@ -254,8 +279,8 @@ class RandObj:
         if not constraints_satisfied:
             multi_var_problem = MultiVarProblem(
                 self,
-                {name: var for name, var in self._random_vars.items() if name in self._constrained_vars},
-                self._constraints,
+                {name: var for name, var in self._random_vars.items() if name in constrained_vars},
+                constraints,
                 max_iterations=self._max_iterations,
                 max_domain_size=self._max_domain_size,
             )
