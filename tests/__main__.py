@@ -23,7 +23,7 @@ class RandObjTests(unittest.TestCase):
     Container for unit tests for constrainedrandom.RandObj
     '''
 
-    def randomize_and_time(self, randobj, iterations, with_constraints=None):
+    def randomize_and_time(self, randobj, iterations, tmp_constraints=None):
         '''
         Call randobj.randomize() iterations times, time it, print performance stats,
         return the results.
@@ -32,8 +32,8 @@ class RandObjTests(unittest.TestCase):
         time_taken = 0
         for _ in range(iterations):
             start_time = timeit.default_timer()
-            if with_constraints is not None:
-                randobj.randomize(with_constraints)
+            if tmp_constraints is not None:
+                randobj.randomize(with_constraints=tmp_constraints)
             else:
                 randobj.randomize()
             end_time = timeit.default_timer()
@@ -44,30 +44,73 @@ class RandObjTests(unittest.TestCase):
         print(f'{self._testMethodName} took {time_taken:.4g}s for {iterations} iterations ({hz:.1f}Hz)')
         return results
 
-    def randobj_test(self, randobj_getter, iterations, check, with_constraints=None):
+    def assertListOfDictsEqual(self, list0, list1, msg):
+        '''
+        This is missing from unittest. It doesn't like it when two large lists of dictionaries
+        are different and compared using `assertListEqual` or `assertEqual`.
+        '''
+        for i, j in zip(list0, list1):
+            self.assertDictEqual(i, j, msg)
+
+    def randobj_test(self, randobj_getter, iterations, check, tmp_constraints=None, tmp_check=None):
         '''
         Reusable test function to randomize a RandObj for a number of iterations and perform checks.
 
         Tests functionality based on check argument. Reports performance stats. Tests determinism.
 
-        randobj_getter: function that accepts a seed and returns a RandObj to be tested.
-        iterations:     number of times to call .randomize()
-        check:          function accepting results (a list of dictionaries) to perform required checks.
+        randobj_getter:   function that accepts a seed and returns a RandObj to be tested.
+        iterations:       number of times to call .randomize()
+        check:            function accepting results (a list of dictionaries) to perform required checks.
+        tmp_constraints:  (optional) temporary constraints to apply to the problem.
+        tmp_check:        (optional) extra check when temporary constraints are applied.
         '''
         iterations *= TEST_LENGTH_MULTIPLIER
+
         # Test with seed 0
         randobj = randobj_getter(0)
-        results = self.randomize_and_time(randobj, iterations, with_constraints)
+        results = self.randomize_and_time(randobj, iterations)
         check(results)
+        if tmp_constraints is not None:
+            # Check when applying temporary constraints
+            tmp_results = self.randomize_and_time(randobj, iterations, tmp_constraints)
+            if tmp_check is not None:
+                tmp_check(tmp_results)
+            # Check temporary constraints don't break base randomization
+            post_tmp_results = self.randomize_and_time(randobj, iterations)
+            check(post_tmp_results)
+
         # Test again with seed 0, ensuring results are the same
         randobj0 = randobj_getter(0)
-        results0 = self.randomize_and_time(randobj0, iterations, with_constraints)
-        self.assertEqual(results, results0, "Non-determinism detected, results were not equal")
+        results0 = self.randomize_and_time(randobj0, iterations)
+        self.assertListOfDictsEqual(results, results0, "Non-determinism detected, results were not equal")
+        if tmp_constraints is not None:
+            # Check applying temporary constraints is also deterministic
+            tmp_results0 = self.randomize_and_time(randobj0, iterations, tmp_constraints)
+            self.assertListOfDictsEqual(
+                tmp_results,
+                tmp_results0,
+                "Non-determinism detected, results were not equal with temp constraints"
+            )
+            # Check temporary constraints don't break base randomization determinism
+            post_tmp_results0 = self.randomize_and_time(randobj0, iterations)
+            self.assertListOfDictsEqual(
+                post_tmp_results,
+                post_tmp_results0,
+                "Non-determinism detected, results were not equal after temp constraints"
+            )
+
         # Test with seed 1, ensuring results are different
         randobj1 = randobj_getter(1)
-        results1 = self.randomize_and_time(randobj1, iterations, with_constraints)
+        results1 = self.randomize_and_time(randobj1, iterations)
         check(results1)
         self.assertNotEqual(results, results1, "Results were the same for two different seeds, check testcase.")
+        if tmp_constraints is not None:
+            # Check results are also different when applying temporary constraints
+            tmp_results1 = self.randomize_and_time(randobj1, iterations, tmp_constraints)
+            if tmp_check is not None:
+                tmp_check(tmp_results1)
+            self.assertNotEqual(tmp_results, tmp_results1,
+                                "Results were the same for two different seeds, check testcase.")
 
     def test_basic(self):
         '''
@@ -273,26 +316,26 @@ class RandObjTests(unittest.TestCase):
             r.add_rand_var('a', domain=range(10))
             return r
 
+        def tmp_constraint(a):
+            return a < 5
+
         def check(results):
+            seen_gt_4 = False
             for result in results:
                 self.assertIn(result['a'], range(10))
-
-        # Test with no temp constraint
-        self.randobj_test(get_randobj, 1000, check)
+                if result['a'] >= 5:
+                    seen_gt_4 = True
+            self.assertTrue(seen_gt_4, "Temporary constraint followed when not given")
 
         def tmp_check(results):
             for result in results:
                 self.assertIn(result['a'], range(5))
 
-        def tmp_constraint(a):
-            return a < 5
+        self.randobj_test(get_randobj, 1000, check, [(tmp_constraint, ('a',))], tmp_check)
 
-        # Test with temp constraint
-        self.randobj_test(get_randobj, 1000, tmp_check, [(tmp_constraint, ('a',))])
-
-    def test_temp_mutli_constraint(self):
+    def test_temp_multi_constraint(self):
         '''
-        Test using temporary multi-variable constraints.
+        Test using a temporary multi-variable constraint.
         '''
         def get_randobj(seed):
             r = RandObj(Random(seed))
@@ -301,18 +344,58 @@ class RandObjTests(unittest.TestCase):
             return r
 
         def check(results):
+            seen_tmp_constraint_false = False
             for result in results:
                 self.assertIn(result['a'], range(10))
                 self.assertIn(result['b'], range(100))
-
-        # Test with no temp constraint
-        self.randobj_test(get_randobj, 1000, check)
+                if result['a'] * result['b'] >= 200 and result['a'] >= 5:
+                    seen_tmp_constraint_false = True
+            self.assertTrue(seen_tmp_constraint_false, "Temporary constraint followed when not given")
 
         def tmp_check(results):
-            # Do normal checks
-            check(results)
-            # Also check the temp constraint is followed
             for result in results:
+                # Do normal checks
+                self.assertIn(result['a'], range(10))
+                self.assertIn(result['b'], range(100))
+                # Also check the temp constraint is followed
+                self.assertLess(result['a'] * result['b'], 200)
+
+        def a_mul_b_lt_200(a, b):
+            return a * b < 200
+
+        self.randobj_test(
+            get_randobj,
+            1000,
+            check,
+            [(a_mul_b_lt_200, ('a', 'b'))],
+            tmp_check
+        )
+
+    def test_mixed_temp_constraints(self):
+        '''
+        Test using a temporary multi-variable constraint, with a single-variable constraint.
+        '''
+        def get_randobj(seed):
+            r = RandObj(Random(seed))
+            r.add_rand_var('a', domain=range(10))
+            r.add_rand_var('b', domain=range(100))
+            return r
+
+        def check(results):
+            seen_tmp_constraint_false = False
+            for result in results:
+                self.assertIn(result['a'], range(10))
+                self.assertIn(result['b'], range(100))
+                if result['a'] * result['b'] >= 200 and result['a'] >= 5:
+                    seen_tmp_constraint_false = True
+            self.assertTrue(seen_tmp_constraint_false, "Temporary constraint followed when not given")
+
+        def tmp_check(results):
+            for result in results:
+                # Do normal checks
+                self.assertIn(result['a'], range(5))
+                self.assertIn(result['b'], range(100))
+                # Also check the temp constraint is followed
                 self.assertLess(result['a'] * result['b'], 200)
 
         def a_lt_5(a):
@@ -321,8 +404,13 @@ class RandObjTests(unittest.TestCase):
         def a_mul_b_lt_200(a, b):
             return a * b < 200
 
-        # Test with temp constraints
-        self.randobj_test(get_randobj, 1000, tmp_check, [(a_lt_5, ('a',)), (a_mul_b_lt_200, ('a', 'b'))])
+        self.randobj_test(
+            get_randobj,
+            1000,
+            check,
+            [(a_lt_5, ('a',)), (a_mul_b_lt_200, ('a', 'b'))],
+            tmp_check
+        )
 
 
 def parse_args():
