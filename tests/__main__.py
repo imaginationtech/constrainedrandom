@@ -355,6 +355,35 @@ class RandObjTests(utils.RandObjTestsBase):
             tmp_check
         )
 
+    def test_with_values(self):
+        '''
+        Basic test for with_values.
+        '''
+        def get_randobj(seed):
+            r = RandObj(Random(seed))
+            r.add_rand_var('a', domain=range(10))
+            r.add_rand_var('b', domain=range(100))
+            return r
+
+        with_values = {'b': 52}
+
+        def check(results):
+            # Ensure we see the temporary value violated at least once
+            non_52_seen = False
+            for result in results:
+                self.assertIn(result['a'], range(10))
+                self.assertIn(result['b'], range(100))
+                if result['b'] != 52:
+                    non_52_seen = True
+            self.assertTrue(non_52_seen, "Temporary value used when it shouldn't be")
+
+        def tmp_check(results):
+            for result in results:
+                self.assertIn(result['a'], range(10))
+                self.assertEqual(result['b'], 52)
+
+        self.randobj_test(get_randobj, 1000, check, None, tmp_check, with_values)
+
 
 def parse_args():
     parser = ArgumentParser(description='Run unit tests for constrainedrandom library')
