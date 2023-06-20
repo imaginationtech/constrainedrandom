@@ -259,10 +259,10 @@ class RandObj:
         with_values = with_values if with_values is not None else {}
 
         for name, random_var in self._random_vars.items():
-            tmp_constraints = tmp_single_var_constraints.get(name, [])
             if name in with_values:
                 result[name] = with_values[name]
             else:
+                tmp_constraints = tmp_single_var_constraints.get(name, [])
                 result[name] = random_var.randomize(tmp_constraints)
 
         # If there are constraints, first try just to solve naively by randomizing the values.
@@ -293,7 +293,8 @@ class RandObj:
                         if var in with_values:
                             continue
                         else:
-                            result[var] = self._random_vars[var].randomize()
+                            tmp_constraints = tmp_single_var_constraints.get(var, [])
+                            result[var] = self._random_vars[var].randomize(tmp_constraints)
                     attempts += 1
 
         # If constraints are still not satisfied by this point, construct a multi-variable
