@@ -41,7 +41,7 @@ class RandVar:
     def __init__(self,
         name: str,
         *,
-        _random: Union[random.Random, None]=None,
+        _random: Optional[random.Random]=None,
         order: int=0,
         domain: Optional[utils.Domain]=None,
         bits: Optional[int]=None,

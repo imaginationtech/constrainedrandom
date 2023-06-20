@@ -53,7 +53,7 @@ class RandObj:
 
     def __init__(
         self,
-        _random: Union[random.Random, None]=None,
+        _random: Optional[random.Random]=None,
         max_iterations: int=utils.MAX_ITERATIONS,
         max_domain_size: int=utils.CONSTRAINT_MAX_DOMAIN_SIZE,
     ) -> None:
@@ -65,6 +65,7 @@ class RandObj:
         self._max_iterations = max_iterations
         self._max_domain_size =max_domain_size
         self._naive_solve = True
+        self._problem_changed = False
 
     def _get_random(self) -> random.Random:
         '''
@@ -165,6 +166,7 @@ class RandObj:
             max_iterations=self._max_iterations,
             max_domain_size=self._max_domain_size,
         )
+        self._problem_changed = True
 
     def add_multi_var_constraint(self, multi_var_constraint: utils.Constraint, variables: Iterable[str]):
         '''
@@ -198,6 +200,7 @@ class RandObj:
             assert var in self._random_vars, f"Variable {var} was not in the set of random variables!"
             self._constrained_vars.add(var)
         self._constraints.append((multi_var_constraint, variables))
+        self._problem_changed = True
 
     def pre_randomize(self) -> None:
         '''
@@ -207,7 +210,12 @@ class RandObj:
         '''
         pass
 
-    def randomize(self, with_constraints: Iterable[Tuple[utils.Constraint, Iterable[str]]]=None) -> None:
+    def randomize(
+        self,
+        *,
+        with_values: Optional[Dict[str, Any]]=None,
+        with_constraints: Optional[Iterable[Tuple[utils.Constraint, Iterable[str]]]]=None,
+    ) -> None:
         '''
         Randomizes all random variables, applying all constraints provided.
         After calling this for the first time, random variables are
@@ -229,6 +237,8 @@ class RandObj:
 
         # Process temporary constraints
         tmp_single_var_constraints = defaultdict(list)
+        # Set to True if the problem is different from the base problem
+        problem_changed = False
         if with_constraints is not None:
             for constr, vars in with_constraints:
                 assert isinstance(vars, Iterable), \
@@ -237,15 +247,23 @@ class RandObj:
                 if len(vars) == 1:
                     # Single-variable constraint
                     tmp_single_var_constraints[vars[0]].append(constr)
+                    problem_changed = True
                 else:
                     # Multi-variable constraint
                     constraints.append((constr, vars))
                     for var in vars:
                         constrained_vars.add(var)
+                    problem_changed = True
+
+        # Process concrete values - use these preferentially
+        with_values = with_values if with_values is not None else {}
 
         for name, random_var in self._random_vars.items():
             tmp_constraints = tmp_single_var_constraints.get(name, [])
-            result[name] = random_var.randomize(tmp_constraints)
+            if name in with_values:
+                result[name] = with_values[name]
+            else:
+                result[name] = random_var.randomize(tmp_constraints)
 
         # If there are constraints, first try just to solve naively by randomizing the values.
         # This will be faster than constructing a MultiVarProblem if the constraints turn out
@@ -271,20 +289,30 @@ class RandObj:
                 else:
                     # No solution found, re-randomize and try again
                     for var in constrained_vars:
-                        result[var] = self._random_vars[var].randomize()
+                        # Don't re-randomize if we've specified a concrete value
+                        if var in with_values:
+                            continue
+                        else:
+                            result[var] = self._random_vars[var].randomize()
                     attempts += 1
 
         # If constraints are still not satisfied by this point, construct a multi-variable
         # problem and solve them properly
         if not constraints_satisfied:
-            multi_var_problem = MultiVarProblem(
-                self,
-                {name: var for name, var in self._random_vars.items() if name in constrained_vars},
-                constraints,
-                max_iterations=self._max_iterations,
-                max_domain_size=self._max_domain_size,
-            )
-            result.update(multi_var_problem.solve())
+            if problem_changed or self._problem_changed or self._multi_var_problem is None:
+                multi_var_problem = MultiVarProblem(
+                    self,
+                    {name: var for name, var in self._random_vars.items() if name in constrained_vars},
+                    constraints,
+                    max_iterations=self._max_iterations,
+                    max_domain_size=self._max_domain_size,
+                )
+                # Only 'cache' the problem if it's the base problem with no extra constraints
+                if not problem_changed:
+                    self._multi_var_problem = multi_var_problem
+            else:
+                multi_var_problem = self._multi_var_problem
+            result.update(multi_var_problem.solve(with_values))
 
         # Update this object such that the results of randomization are available as member variables
         self.__dict__.update(result)

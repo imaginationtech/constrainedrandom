@@ -45,8 +45,9 @@ class MultiVarProblem:
         self.constraints = constraints
         self.max_iterations = max_iterations
         self.max_domain_size = max_domain_size
+        self.order = None
 
-    def determine_order(self) -> List[List['RandVar']]:
+    def determine_order(self, with_values: Dict[str, Any]) -> List[List['RandVar']]:
         '''
         Chooses an order in which to resolve the values of the variables.
         Used internally.
@@ -55,14 +56,28 @@ class MultiVarProblem:
             Each inner list is a group of variables that can be solved at the same
             time. Each inner list will be considered separately.
         '''
+        # Use 'cached' version if no concrete values are specified
+        problem_changed = len(with_values) != 0
+        if not problem_changed and self.order is not None:
+            return self.order
+
         # Aim to build a list of lists, each inner list denoting a group of variables
         # to solve at the same time.
         # The best case is to simply solve them all at once, if possible, however it is
         # likely that the domain will be too large.
+        vars = []
+
+        # If values are provided, simply don't add those variables to the ordering problem.
+        if problem_changed:
+            for name, var in self.vars.items():
+                if name not in with_values:
+                    vars.append(var)
+        else:
+            vars = list(self.vars.values())
 
         # Use order hints first, remaining variables can be placed anywhere the domain
         # isn't too large.
-        sorted_vars = sorted(self.vars.values(), key=lambda x: x.order)
+        sorted_vars = sorted(vars, key=lambda x: x.order)
 
         # Currently this is just a flat list. Group into as large groups as possible.
         result = [[sorted_vars[0]]]
@@ -80,11 +95,15 @@ class MultiVarProblem:
                 domain_size = len(var.domain) if var.domain is not None else 1
                 result.append([var])
 
+        if not problem_changed:
+            self.order = result
+
         return result
 
     def solve_groups(
         self,
         groups: List[List['RandVar']],
+        with_values: Dict[str, Any],
         max_iterations:int,
         solutions_per_group: Optional[int]=None,
     ) -> Union[Dict[str, Any], None]:
@@ -116,9 +135,14 @@ class MultiVarProblem:
 
         if sparse_solver:
             solved_vars = defaultdict(set)
+            if len(with_values) > 0:
+                for var_name, value in with_values.items():
+                    solved_vars[var_name].add(value)
         else:
             solved_vars = []
             problem = constraint.Problem()
+            for var_name, value in with_values.items():
+                problem.addVariable(name, (value,))
 
         for idx, group in enumerate(groups):
             # Construct a constraint problem where possible. A variable must have a domain
@@ -200,7 +224,7 @@ class MultiVarProblem:
 
         return self.random.choice(solutions)
 
-    def solve(self) -> Union[Dict[str, Any], None]:
+    def solve(self, with_values: Optional[Dict[str, Any]]=None) -> Union[Dict[str, Any], None]:
         '''
         Attempt to solve the variables with respect to the constraints.
 
@@ -209,7 +233,8 @@ class MultiVarProblem:
         :raises RuntimeError: When the problem cannot be solved in fewer than
             the allowed number of iterations.
         '''
-        groups = self.determine_order()
+        with_values = {} if with_values is None else with_values
+        groups = self.determine_order(with_values)
 
         solution = None
 
@@ -225,13 +250,12 @@ class MultiVarProblem:
         iterations_per_attempt = self.max_iterations // 10
         for sparsity in sparsities:
             for _ in range(iterations_per_sparsity):
-                solution = self.solve_groups(groups, iterations_per_attempt, sparsity)
+                solution = self.solve_groups(groups, with_values, iterations_per_attempt, sparsity)
                 if solution is not None and len(solution) > 0:
                     return solution
 
         # Try 'thorough' method - no backup plan if this fails
-        solution = self.solve_groups(groups, self.max_iterations)
+        solution = self.solve_groups(groups, with_values, self.max_iterations)
         if solution is None:
             raise RuntimeError("Could not solve problem.")
         return solution
-
