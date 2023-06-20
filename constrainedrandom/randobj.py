@@ -254,6 +254,12 @@ class RandObj:
                     for var in vars:
                         constrained_vars.add(var)
                     problem_changed = True
+            # If a variable becomes constrained due to temporary multi-variable
+            # constraints, we must respect single var temporary constraints too.
+            for var, constrs in tmp_single_var_constraints.items():
+                if var in constrained_vars:
+                    for constr in constrs:
+                        constraints.append((constr, (var,)))
 
         # Process concrete values - use these preferentially
         with_values = with_values if with_values is not None else {}
