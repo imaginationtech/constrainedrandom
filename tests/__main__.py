@@ -384,6 +384,56 @@ class RandObjTests(utils.RandObjTestsBase):
 
         self.randobj_test(get_randobj, 1000, check, None, tmp_check, with_values)
 
+    def test_with_values_with_constraints(self):
+        '''
+        Test how with_values and with_constraints interact.
+        '''
+        def get_randobj(seed):
+            r = RandObj(Random(seed))
+            r.add_rand_var('a', domain=range(10))
+            r.add_rand_var('b', domain=range(100))
+            return r
+
+        def check(results):
+            seen_tmp_constraint_false = False
+            seen_tmp_value_false = False
+            for result in results:
+                self.assertIn(result['a'], range(10))
+                self.assertIn(result['b'], range(100))
+                if result['a'] * result['b'] >= 200 and result['a'] >= 5:
+                    seen_tmp_constraint_false = True
+                if result['a'] != 3:
+                    seen_tmp_value_false = True
+            self.assertTrue(seen_tmp_constraint_false, "Temporary constraint followed when not given")
+            self.assertTrue(seen_tmp_value_false, "Temporary value followed when not given")
+
+        def tmp_check(results):
+            for result in results:
+                # Do normal checks
+                self.assertIn(result['a'], range(5))
+                self.assertIn(result['b'], range(100))
+                # Also check the temp constraint is followed
+                self.assertLess(result['a'] * result['b'], 200)
+                # Check the temp value has been followed
+                self.assertEqual(result['a'], 3)
+
+        def a_lt_5(a):
+            return a < 5
+
+        def a_mul_b_lt_200(a, b):
+            return a * b < 200
+
+        tmp_values = {'a': 3}
+
+        self.randobj_test(
+            get_randobj,
+            1000,
+            check,
+            [(a_lt_5, ('a',)), (a_mul_b_lt_200, ('a', 'b'))],
+            tmp_check,
+            tmp_values
+        )
+
 
 def parse_args():
     parser = ArgumentParser(description='Run unit tests for constrainedrandom library')
