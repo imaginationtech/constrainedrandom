@@ -3,5 +3,6 @@
 
 from .random import dist, weighted_choice
 from .randobj import RandObj
+from .utils import RandomizationError
 
-__all__ = ['dist', 'weighted_choice', 'RandObj']
+__all__ = ['dist', 'weighted_choice', 'RandObj', 'RandomizationError']

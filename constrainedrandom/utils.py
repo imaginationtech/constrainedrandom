@@ -18,3 +18,8 @@ MAX_ITERATIONS = 100
 
 # The default largest domain size to use with the constraint library
 CONSTRAINT_MAX_DOMAIN_SIZE = 1 << 10
+
+class RandomizationError(Exception):
+    '''
+    Denotes that a randomization attempt has failed.
+    '''

@@ -122,7 +122,7 @@ class RandObj:
             If ``fn`` is not used, ``args`` must not be used.
         :param constraints: List or tuple of constraints that apply to this random variable.
         :return: ``None``
-        :raise AssertionError: If inputs are not valid.
+        :raises AssertionError: If inputs are not valid.
 
         :example:
 
@@ -225,7 +225,7 @@ class RandObj:
         :param with_constraints: Temporary constraints for this randomization only.
             List of tuples, consisting of a constraint function and an iterable
             containing the variables it applies to.
-        :raises RuntimeError: If no solution is found within defined limits.
+        :raises RandomizationError: If no solution is found within defined limits.
         '''
         self.pre_randomize()
 

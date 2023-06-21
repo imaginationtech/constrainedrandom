@@ -230,7 +230,7 @@ class MultiVarProblem:
 
         :return: One valid solution for the randomization problem, represented as
             a dictionary with keys referring to the named variables.
-        :raises RuntimeError: When the problem cannot be solved in fewer than
+        :raises RandomizationError: When the problem cannot be solved in fewer than
             the allowed number of iterations.
         '''
         with_values = {} if with_values is None else with_values
@@ -257,5 +257,5 @@ class MultiVarProblem:
         # Try 'thorough' method - no backup plan if this fails
         solution = self.solve_groups(groups, with_values, self.max_iterations)
         if solution is None:
-            raise RuntimeError("Could not solve problem.")
+            raise utils.RandomizationError("Could not solve problem.")
         return solution

@@ -137,7 +137,7 @@ class RandVar:
             this randomization.
         :return: A randomly generated value, conforming to the definition of
             this random variable, its constraints, etc.
-        :raises RuntimeError: When the problem cannot be solved in fewer than
+        :raises RandomizationError: When the problem cannot be solved in fewer than
             the allowed number of iterations.
         '''
         value = self.randomizer()
@@ -152,7 +152,7 @@ class RandVar:
         iterations = 0
         while not value_valid:
             if iterations == self.max_iterations:
-                raise RuntimeError("Too many iterations, can't solve problem")
+                raise utils.RandomizationError("Too many iterations, can't solve problem")
             problem = constraint.Problem()
             problem.addVariable(self.name, (value,))
             for con in constraints:
