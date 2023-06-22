@@ -434,6 +434,70 @@ class RandObjTests(utils.RandObjTestsBase):
             tmp_values
         )
 
+    def test_tricky_temp_values(self):
+        '''
+        Force use of MultiVarProblem with a difficult problem, and
+        also use temporary constraints and temporary values.
+        '''
+        # Use a few extra temporary constraints to make the problem even harder
+        def tmp_abs_sum_xy_lt50(x, y):
+            return abs(x) + abs(y) < 50
+
+        def tmp_x_mod2(x):
+            return x % 2 == 0
+
+        def tmp_yz_mod3(y, z):
+            return (y + z) % 2 == 1
+
+        tmp_values = {'x': 6}
+
+        # Check that we see x and y sum to greater than 50 when
+        # the temporary constraint isn't in place
+        def check(results):
+            # Normal checks
+            utils.randobj_sum_check(self, results)
+            # Temp constraint not respected - check for at least one instance
+            # where all conditions are not respected
+            temp_constraint_respected = True
+            temp_value_respected = True
+            for result in results:
+                if result['x'] + result['y'] >= 50 and \
+                    (result['x'] % 2 == 1 or \
+                     (result['y'] + result['z']) % 2 == 0):
+                    temp_constraint_respected = False
+                if result['x'] != 6:
+                    temp_value_respected = False
+            self.assertFalse(
+                temp_constraint_respected,
+                "Temp constraint should not be followed when not applied"
+            )
+            self.assertFalse(
+                temp_value_respected,
+                "Temp value should not be followed when not applied"
+            )
+
+        # Check that the temp constraint is respected
+        def tmp_check(results):
+            # Normal checks
+            utils.randobj_sum_check(self, results)
+            # Temp constraint respected
+            for result in results:
+                self.assertLess(result['x'] + result['y'], 50, "Temp constraint not respected")
+                self.assertTrue(result['x'] % 2 == 0, "Temp constraint not respected")
+                self.assertTrue((result['y'] + result['z']) % 2 == 1, "Temp constraint not respected")
+                self.assertEqual(result['x'], 6, "Temp value not respected")
+
+        self.randobj_test(
+            utils.get_randobj_sum,
+            50,
+            check,
+            [(tmp_abs_sum_xy_lt50, ('x', 'y')),
+             (tmp_x_mod2, ('x',)),
+             (tmp_yz_mod3, ('y', 'z'))],
+            tmp_check,
+            tmp_values
+        )
+
 
 def parse_args():
     parser = ArgumentParser(description='Run unit tests for constrainedrandom library')

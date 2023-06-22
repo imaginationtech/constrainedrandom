@@ -3,7 +3,7 @@
 
 import constraint
 from collections import defaultdict
-from typing import Any, Dict, Iterable, List, Optional, TYPE_CHECKING, Union
+from typing import Any, Dict, Iterable, List, Optional, TYPE_CHECKING, Tuple, Union
 
 from .. import utils
 
@@ -40,7 +40,6 @@ class MultiVarProblem:
         max_domain_size: int,
     ) -> None:
         self.parent = parent
-        self.random = self.parent._random
         self.vars = vars
         self.constraints = constraints
         self.max_iterations = max_iterations
@@ -52,6 +51,8 @@ class MultiVarProblem:
         Chooses an order in which to resolve the values of the variables.
         Used internally.
 
+        :param with_values: Dictionary of variables with set values for this
+            randomization.
         :return: A list of lists denoting the order in which to solve the problem.
             Each inner list is a group of variables that can be solved at the same
             time. Each inner list will be considered separately.
@@ -100,88 +101,91 @@ class MultiVarProblem:
 
         return result
 
-    def solve_groups(
+    def process_group(
         self,
-        groups: List[List['RandVar']],
-        with_values: Dict[str, Any],
-        max_iterations:int,
-        solutions_per_group: Optional[int]=None,
-    ) -> Union[Dict[str, Any], None]:
+        group: List['RandVar'],
+        solved_vars: List[str],
+        problem: constraint.Problem,
+        constraints: List[utils.Constraint],
+    ) -> Tuple[List[str], List['RandVar'], List[utils.Constraint]]:
         '''
-        Constraint solving algorithm (internally used by :class:`MultiVarProblem`).
+        Determines which variables in the group can be solved via a
+        constraint problem and which ones must be randomized and checked.
+        (Used internally by :class:`MultiVarProblem`).
 
-        :param groups: The list of lists denoting the order in which to resolve the random variables.
-            See :func:`determine_order`.
-        :param max_iterations: The maximum number of failed attempts to solve the randomization
-            problem before giving up.
-        :param solutions_per_group: If ``solutions_per_group`` is not ``None``,
-            solve each constraint group problem 'sparsely',
-            i.e. maintain only a subset of potential solutions between groups.
-            Fast but prone to failure.
-
-            ``solutions_per_group = 1`` is effectively a depth-first search through the state space
-            and comes with greater benefits of considering each multi-variable constraint at
-            most once.
-
-            If ``solutions_per_group`` is ``None``, Solve constraint problem 'thoroughly',
-            i.e. keep all possible results between iterations.
-            Slow, but will usually converge.
-        :returns: A valid solution to the problem, in the form of a dictionary with the
-            names of the random variables as keys and the valid solution as the values.
-            Returns ``None`` if no solution is found within the allotted ``max_iterations``.
+        :param group: List of random variables in this group.
+        :param solved vars: List of variable names that are already solved.
+        :param problem: Constraint problem to add variables and constraints to.
+            Note that the instance will be modified by this function.
+        :param constraints: Constraints that still apply at this stage of
+            solving the problem.
+        :return: A tuple of 1) a list the names of the variables in the group,
+            2) a list of variables that must be randomized rather than solved
+            via a constraint problem,
+            3) a list of constraints that won't be applied for this group.
         '''
-        constraints = self.constraints
-        sparse_solver = solutions_per_group is not None
+        # Construct a constraint problem where possible. A variable must have a domain
+        # in order to be part of the problem. If it doesn't have one, it must just be
+        # randomized.
+        group_vars = []
+        rand_vars = []
+        for var in group:
+            group_vars.append(var.name)
+            if var.domain is not None and not isinstance(var.domain, dict):
+                problem.addVariable(var.name, var.domain)
+                # If variable has its own constraints, these must be added to the problem,
+                # regardless of whether var.check_constraints is true, as the var's value will
+                # depend on the value of the other constrained variables in the problem.
+                for con in var.constraints:
+                    problem.addConstraint(con, (var.name,))
+            else:
+                rand_vars.append(var)
 
-        if sparse_solver:
-            solved_vars = defaultdict(set)
-            if len(with_values) > 0:
-                for var_name, value in with_values.items():
-                    solved_vars[var_name].add(value)
-        else:
-            solved_vars = []
-            problem = constraint.Problem()
-            for var_name, value in with_values.items():
-                problem.addVariable(name, (value,))
+        # Add all pertinent constraints
+        skipped_constraints = []
+        for (con, vars) in constraints:
+            skip = False
+            for var in vars:
+                if var not in group_vars and var not in solved_vars:
+                    # Skip this constraint
+                    skip = True
+                    break
+            if skip:
+                skipped_constraints.append((con, vars))
+                continue
+            problem.addConstraint(con, vars)
 
-        for idx, group in enumerate(groups):
-            # Construct a constraint problem where possible. A variable must have a domain
-            # in order to be part of the problem. If it doesn't have one, it must just be
-            # randomized.
-            if sparse_solver:
-                # Construct one problem per iteration, add solved variables from previous groups
-                problem = constraint.Problem()
-                for name, values in solved_vars.items():
-                    problem.addVariable(name, list(values))
-            group_vars = []
-            rand_vars = []
-            for var in group:
-                group_vars.append(var.name)
-                if var.domain is not None and not isinstance(var.domain, dict):
-                    problem.addVariable(var.name, var.domain)
-                    # If variable has its own constraints, these must be added to the problem,
-                    # regardless of whether var.check_constraints is true, as the var's value will
-                    # depend on the value of the other constrained variables in the problem.
-                    for con in var.constraints:
-                        problem.addConstraint(con, (var.name,))
-                else:
-                    rand_vars.append(var)
-            # Add all pertinent constraints
-            skipped_constraints = []
-            for (con, vars) in constraints:
-                skip = False
-                for var in vars:
-                    if var not in group_vars and var not in solved_vars:
-                        # Skip this constraint
-                        skip = True
-                        break
-                if skip:
-                    skipped_constraints.append((con, vars))
-                    continue
-                problem.addConstraint(con, vars)
-            # Problem is ready to solve, apart from any new random variables
-            solutions = []
-            attempts = 0
+        return group_vars, rand_vars, skipped_constraints
+
+    def solve_group(
+        self,
+        rand_vars: List['RandVar'],
+        problem: constraint.Problem,
+        max_iterations: int,
+        solutions_per_group: int,
+    ) -> Union[List[Dict[str, Any]], None]:
+        '''
+        Attempts to solve one group of variables. Preferentially uses a constraint
+        satisfaction problem, but may need to randomize variables that can't be
+        added to a constraint satisfaction problem.
+        (Used internally by :class:`MultiVarProblem`).
+
+        :param rand_vars: List of random variables in the group (which can't be
+            added to a constraint satisfaction problem).
+        :param problem: Constraint satisfaction problem.
+        :param max_iterations: Maximum number of attempts to solve the problem
+            before giving up.
+        :solutions_per_group: How many random values to produce before attempting
+            to solve the constraint satisfaction problem. A lower value will run
+            quicker but has less chance to succeed.
+        :return: A list of all possible solutions for the group, or ``None`` if
+            it can't be solved within ``max_iterations`` attempts.
+        '''
+        # Problem is ready to solve, apart from random variables
+        solutions = []
+        attempts = 0
+        if len(rand_vars) > 0:
+            # If we have additional random variables, randomize and check
             while True:
                 if attempts >= max_iterations:
                     # We have failed, give up
@@ -203,31 +207,136 @@ class MultiVarProblem:
                     for var in rand_vars:
                         # Remove from problem, they will be re-added with different concrete values
                         del problem._variables[var.name]
-            # This group is solved, move on to the next group.
-            if sparse_solver:
-                if idx != len(groups) - 1:
-                    # Store a small number of concrete solutions to avoid bloating the state space.
-                    if solutions_per_group < len(solutions):
-                        solution_subset = self.random.choices(solutions, k=solutions_per_group)
-                    else:
-                        solution_subset = solutions
-                    solved_vars = defaultdict(set)
-                    for soln in solution_subset:
-                        for name, value in soln.items():
-                            solved_vars[name].add(value)
-                if solutions_per_group == 1:
-                    # This means we have exactly one solution for the variables considered so far,
-                    # meaning we don't need to re-apply solved constraints for future groups.
-                    constraints = skipped_constraints
-            else:
-                solved_vars += group_vars
+        else:
+            # Otherwise, just get the solutions, no randomization required.
+            solutions = problem.getSolutions()
+            if len(solutions) == 0:
+                # Failed
+                return None
 
-        return self.random.choice(solutions)
+        return solutions
+
+    def solve_groups(
+        self,
+        groups: List[List['RandVar']],
+        with_values: Dict[str, Any],
+        max_iterations:int,
+        solutions_per_group: Optional[int]=None,
+    ) -> Union[Dict[str, Any], None]:
+        '''
+        Constraint solving algorithm. (Used internally by :class:`MultiVarProblem`)
+
+        :param groups: The list of lists denoting the order in which to resolve the random variables.
+            See :func:`determine_order`.
+        :param with_values: Dictionary of variables with set values for this
+            randomization.
+        :param max_iterations: The maximum number of failed attempts to solve the randomization
+            problem before giving up.
+        :param solutions_per_group: If ``solutions_per_group`` is not ``None``,
+            solve each constraint group problem 'sparsely',
+            i.e. maintain only a subset of potential solutions between groups.
+            Fast but prone to failure.
+
+            ``solutions_per_group = 1`` is effectively a depth-first search through the state space
+            and comes with greater benefits of considering each multi-variable constraint at
+            most once.
+
+            If ``solutions_per_group`` is ``None``, Solve constraint problem 'thoroughly',
+            i.e. keep all possible results between iterations.
+            Slow, but will usually converge.
+        :returns: A valid solution to the problem, in the form of a dictionary with the
+            names of the random variables as keys and the valid solution as the values.
+            Returns ``None`` if no solution is found within the allotted ``max_iterations``.
+        '''
+        constraints = self.constraints
+        sparse_solver = solutions_per_group is not None
+        solutions = []
+        solved_vars = []
+
+        # Respect assigned temporary values
+        if len(with_values) > 0:
+            for var_name in with_values.keys():
+                solved_vars.append(var_name)
+            solutions.append(with_values)
+
+        # If solving sparsely, we'll create a new problem for each group.
+        # If not solving sparsely, just create one big problem that we add to
+        # as we go along.
+        if not sparse_solver:
+            problem = constraint.Problem()
+            for var_name, value in with_values.items():
+                problem.addVariable(var_name, (value,))
+
+        for group in groups:
+            if sparse_solver:
+                # Construct one problem per group, add solved variables from previous groups.
+                problem = constraint.Problem()
+            # Construct the appropriate problem
+            group_vars, rand_vars, skipped_constraints = self.process_group(
+                group,
+                solved_vars,
+                problem,
+                constraints
+            )
+
+            group_solutions = None
+            attempts = 0
+            while group_solutions is None or len(group_solutions) == 0:
+                if sparse_solver:
+                    if len(solutions) > 0:
+                        # Respect a proportion of the solution space, determined
+                        # by the sparsity/solutions_per_group.
+                        if solutions_per_group >= len(solutions):
+                            solution_subset = solutions
+                        else:
+                            solution_subset = self.parent._get_random().choices(
+                                solutions,
+                                k=solutions_per_group
+                            )
+                        if solutions_per_group == 1:
+                            for var_name, value in solution_subset[0].items():
+                                if var_name in problem._variables:
+                                    del problem._variables[var_name]
+                                problem.addVariable(var_name, (value,))
+                        else:
+                            solution_space = defaultdict(set)
+                            for soln in solution_subset:
+                                for var_name, value in soln.items():
+                                    solution_space[var_name].add(value)
+                            for var_name, values in solution_space.items():
+                                if var_name in problem._variables:
+                                    del problem._variables[var_name]
+                                problem.addVariable(var_name, list(values))
+
+                # Attempt to solve the group
+                group_solutions = self.solve_group(
+                    rand_vars,
+                    problem,
+                    max_iterations,
+                    solutions_per_group
+                )
+
+                attempts += 1
+                if attempts > max_iterations:
+                    # We have failed, give up
+                    return None
+
+            # This group is solved, move on to the next group.
+            if solutions_per_group == 1:
+                # This means we have exactly one solution for the variables considered so far,
+                # meaning we don't need to re-apply solved constraints for future groups.
+                constraints = skipped_constraints
+            solved_vars += group_vars
+            solutions = group_solutions
+
+        return self.parent._get_random().choice(solutions)
 
     def solve(self, with_values: Optional[Dict[str, Any]]=None) -> Union[Dict[str, Any], None]:
         '''
         Attempt to solve the variables with respect to the constraints.
 
+        :param with_values: Dictionary of variables with set values for this
+            randomization.
         :return: One valid solution for the randomization problem, represented as
             a dictionary with keys referring to the named variables.
         :raises RandomizationError: When the problem cannot be solved in fewer than
