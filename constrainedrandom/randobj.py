@@ -100,6 +100,8 @@ class RandObj:
         fn: Optional[Callable]=None,
         args: Optional[tuple]=None,
         constraints: Optional[Iterable[utils.Constraint]]=None,
+        list_constraints: Optional[Iterable[utils.Constraint]]=None,
+        length: int=0,
         order: int=0,
     ) -> None:
         '''
@@ -108,7 +110,6 @@ class RandObj:
         to determine how to randomize.
 
         :param name: The name of this random variable.
-        :param order: The solution order for this variable with respect to other variables.
         :param domain: The possible values for this random variable, expressed either
             as a ``range``, or as an iterable (e.g. ``list``, ``tuple``) of possible values.
             Mutually exclusive with ``bits`` and ``fn``.
@@ -121,6 +122,13 @@ class RandObj:
         :param args: Arguments to pass to the function specified in ``fn``.
             If ``fn`` is not used, ``args`` must not be used.
         :param constraints: List or tuple of constraints that apply to this random variable.
+            Each of these apply only to the individual values in the list, if a length is
+            specified.
+        :param constraints: List or tuple of constraints that apply to this random variable.
+            Each of these apply across the values in the list, if a length is specified.
+        :param length: Specify a length > 0 to turn this variable into a list of random
+            values. A value of 0 means a scalar value. A value >= 1 means a list of that length.
+        :param order: The solution order for this variable with respect to other variables.
         :return: ``None``
         :raises AssertionError: If inputs are not valid.
 
@@ -163,6 +171,8 @@ class RandObj:
             fn=fn,
             args=args,
             constraints=constraints,
+            list_constraints=list_constraints,
+            length=length,
             max_iterations=self._max_iterations,
             max_domain_size=self._max_domain_size,
         )

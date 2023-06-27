@@ -11,6 +11,7 @@ from functools import partial
 from enum import Enum, IntEnum
 from random import Random
 
+from constrainedrandom.utils import unique
 from constrainedrandom import RandObj
 from examples.ldinstr import ldInstr
 from . import utils
@@ -497,6 +498,108 @@ class RandObjTests(utils.RandObjTestsBase):
             tmp_check,
             tmp_values
         )
+
+    def test_list(self):
+        '''
+        Test a randomized list.
+        '''
+        def get_randobj(seed):
+            r = RandObj(Random(seed))
+            r.add_rand_var('listvar', domain=range(10), length=10)
+            return r
+
+        def check(results):
+            for result in results:
+                self.assertIsInstance(result['listvar'], list, "Var with length > 0 wasn't a list")
+                for x in result['listvar']:
+                    self.assertIn(x, range(10), "Value was wrongly randomized")
+
+        self.randobj_test(get_randobj, 1000, check)
+
+    def test_list_constrained(self):
+        '''
+        Test a randomized list with constraints on the values in the list.
+        '''
+        def get_randobj(seed):
+            r = RandObj(Random(seed))
+            def plus_or_minus_one(listvar):
+                val = listvar[0]
+                for nxt_val in listvar[1:]:
+                    if nxt_val == val + 1 or nxt_val == val - 1:
+                        val = nxt_val
+                        continue
+                    return False
+                return True
+            r.add_rand_var('listvar', domain=range(10), length=10, list_constraints=(plus_or_minus_one,))
+            return r
+
+        def check(results):
+            for result in results:
+                self.assertIsInstance(result['listvar'], list, "Var with length > 0 wasn't a list")
+                prev = None
+                for x in result['listvar']:
+                    self.assertIn(x, range(10), "Value was wrongly randomized")
+                    if prev is not None:
+                        self.assertTrue(x == prev + 1 or x == prev - 1, "list constraint not followed")
+                    prev = x
+
+        self.randobj_test(get_randobj, 100, check)
+
+    def test_list_multivar(self):
+        '''
+        Test a randomized list with constraints on the values in the list,
+        also with constraints over multiple variables.
+        '''
+        def get_randobj(seed):
+            r = RandObj(Random(seed))
+            def plus_or_minus_one(listvar):
+                val = listvar[0]
+                for nxt_val in listvar[1:]:
+                    if nxt_val == val + 1 or nxt_val == val - 1:
+                        val = nxt_val
+                        continue
+                    return False
+                return True
+            r.add_rand_var('listvar', domain=range(10), length=10, list_constraints=(plus_or_minus_one,))
+            r.add_rand_var('x', domain=range(100))
+            def in_list(x, listvar):
+                return x in listvar
+            r.add_multi_var_constraint(in_list, ('x', 'listvar'))
+            return r
+
+        def check(results):
+            for result in results:
+                self.assertIsInstance(result['listvar'], list, "Var with length > 0 wasn't a list")
+                prev = None
+                for l in result['listvar']:
+                    self.assertIn(l, range(10), "Value was wrongly randomized")
+                    if prev is not None:
+                        self.assertTrue(l == prev + 1 or l == prev - 1, "list constraint not followed")
+                    prev = l
+                self.assertIn(result['x'], result['listvar'])
+
+        self.randobj_test(get_randobj, 100, check)
+
+
+    def test_list_unique(self):
+        '''
+        Test that the unique constraint works on a random list.
+        '''
+        def get_randobj(seed):
+            r = RandObj(Random(seed))
+            r.add_rand_var('listvar', domain=range(10), length=10, list_constraints=(unique,))
+            return r
+
+        def check(results):
+            for result in results:
+                self.assertIsInstance(result['listvar'], list, "Var with length > 0 wasn't a list")
+                for x_idx, x in enumerate(result['listvar']):
+                    self.assertIn(x, range(10), "Value was wrongly randomized")
+                    for y_idx, y in enumerate(result['listvar']):
+                        if x_idx != y_idx:
+                            self.assertNotEqual(x, y, "List elements were not unique")
+
+        self.randobj_test(get_randobj, 1000, check)
 
 
 def parse_args():

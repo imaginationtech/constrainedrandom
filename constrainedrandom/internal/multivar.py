@@ -83,17 +83,16 @@ class MultiVarProblem:
         # Currently this is just a flat list. Group into as large groups as possible.
         result = [[sorted_vars[0]]]
         index = 0
-        domain_size = len(sorted_vars[0].domain) if sorted_vars[0].domain is not None else 1
+        domain_size = sorted_vars[0].get_domain_size()
         for var in sorted_vars[1:]:
-            if var.domain is not None:
-                domain_size = domain_size * len(var.domain)
+            domain_size = domain_size * var.get_domain_size()
             if var.order == result[index][0].order and domain_size < self.max_domain_size:
                 # Put it in the same group as the previous one, carry on
                 result[index].append(var)
             else:
                 # Make a new group
                 index += 1
-                domain_size = len(var.domain) if var.domain is not None else 1
+                domain_size = var.get_domain_size()
                 result.append([var])
 
         if not problem_changed:
@@ -126,13 +125,14 @@ class MultiVarProblem:
         '''
         # Construct a constraint problem where possible. A variable must have a domain
         # in order to be part of the problem. If it doesn't have one, it must just be
-        # randomized.
+        # randomized. Also take care not to exceed tha maximum domain size for an
+        # individual variable.
         group_vars = []
         rand_vars = []
         for var in group:
             group_vars.append(var.name)
-            if var.domain is not None and not isinstance(var.domain, dict):
-                problem.addVariable(var.name, var.domain)
+            if var.can_use_with_constraint() and var.get_domain_size() < self.max_domain_size:
+                problem.addVariable(var.name, var.get_constraint_domain())
                 # If variable has its own constraints, these must be added to the problem,
                 # regardless of whether var.check_constraints is true, as the var's value will
                 # depend on the value of the other constrained variables in the problem.
