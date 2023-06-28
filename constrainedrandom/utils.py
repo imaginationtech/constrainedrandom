@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2023 Imagination Technologies Ltd. All Rights Reserved
 
-from typing import Any, Callable, Dict, Iterable, Union
+from typing import Any, Callable, Dict, Iterable, List, Tuple, Union
 
 
 # Distribution type
@@ -43,3 +43,26 @@ def unique(list_variable: Iterable[Any]) -> bool:
             return False
         seen.add(i)
     return True
+
+def debug_constraints(
+        constraints: Iterable[Tuple[Constraint, Iterable[str]]],
+        values: Dict[str, Any]
+    ) -> List[Constraint]:
+    '''
+    Call this to debug constraints. Gives feedback on which constraints
+    are not satisfied by the current set of values.
+
+    :param constraints: the list of constraints and the variables
+        they apply to.
+    :param values: dictionary of values.
+    :return: List of failing constraints.
+    '''
+    unsatisfied = []
+    for constr, var_names in constraints:
+        args = []
+        for var_name in var_names:
+            args.append(values[var_name])
+        satisfied = constr(*args)
+        if not satisfied:
+            unsatisfied.append(constr)
+    return unsatisfied
