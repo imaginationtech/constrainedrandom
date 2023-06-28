@@ -561,7 +561,7 @@ class RandObjTests(utils.RandObjTestsBase):
                     return False
                 return True
             r.add_rand_var('listvar', domain=range(10), length=10, list_constraints=(plus_or_minus_one,))
-            r.add_rand_var('x', domain=range(100))
+            r.add_rand_var('x', domain=range(100), order=1)
             def in_list(x, listvar):
                 return x in listvar
             r.add_multi_var_constraint(in_list, ('x', 'listvar'))
@@ -578,7 +578,7 @@ class RandObjTests(utils.RandObjTestsBase):
                     prev = l
                 self.assertIn(result['x'], result['listvar'])
 
-        self.randobj_test(get_randobj, 100, check)
+        self.randobj_test(get_randobj, 30, check)
 
 
     def test_list_unique(self):

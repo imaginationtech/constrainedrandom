@@ -264,20 +264,40 @@ class RandVar:
             values = []
             # Create list of values, checking as we go that list constraints
             # are followed.
+            # Try to construct a constraint solution problem, if possible.
+            check_list_constraints = len(self.list_constraints) > 0
+            use_csp = check_list_constraints and self.can_use_with_constraint() \
+                    and len(self.domain) < self.max_domain_size
             for i in range(self.length):
-                values_valid = i == 0 or len(self.list_constraints) == 0
-                new_value = self.randomize_once(constraints, check_constraints)
-                iterations = 0
-                while not values_valid:
-                    if iterations == self.max_iterations:
-                        raise utils.RandomizationError("Too many iterations, can't solve problem")
+                if use_csp:
                     problem = constraint.Problem()
-                    problem.addVariable(self.name, (values + [new_value],))
+                    possible_values = []
+                    for x in self.domain:
+                        new_values = list(values)
+                        new_values.append(x)
+                        possible_values.append(new_values)
+                    problem.addVariable(self.name, possible_values)
                     for con in self.list_constraints:
                         problem.addConstraint(con, (self.name,))
-                    values_valid = problem.getSolution() is not None
-                    if not values_valid:
-                        new_value = self.randomize_once(constraints, check_constraints)
-                        iterations += 1
-                values.append(new_value)
+                    solutions = problem.getSolutions()
+                    if len(solutions) == 0:
+                        raise utils.RandomizationError("Problem was unsolvable.")
+                    values = self._get_random().choice(solutions)[self.name]
+                else:
+                    # Otherwise, just randomize and check.
+                    new_value = self.randomize_once(constraints, check_constraints)
+                    values_valid = not check_list_constraints or i == 0
+                    iterations = 0
+                    while not values_valid:
+                        if iterations == self.max_iterations:
+                            raise utils.RandomizationError("Too many iterations, can't solve problem")
+                        problem = constraint.Problem()
+                        problem.addVariable(self.name, (values + [new_value],))
+                        for con in self.list_constraints:
+                            problem.addConstraint(con, (self.name,))
+                        values_valid = problem.getSolution() is not None
+                        if not values_valid:
+                            new_value = self.randomize_once(constraints, check_constraints)
+                            iterations += 1
+                    values.append(new_value)
             return values
