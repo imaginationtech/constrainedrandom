@@ -25,7 +25,7 @@ def get_randobj_sum(seed):
     r.add_rand_var("z", domain=range(-100, 100), order=1, constraints=(nonzero,))
     def sum_41(x, y, z):
         return x + y + z == 41
-    r.add_multi_var_constraint(sum_41, ("x", "y", "z"))
+    r.add_constraint(sum_41, ("x", "y", "z"))
     return r
 
 
@@ -108,6 +108,12 @@ class RandObjTestsBase(unittest.TestCase):
             # Check temporary constraints don't break base randomization
             post_tmp_results = self.randomize_and_time(randobj, iterations)
             check(post_tmp_results)
+            # Add temporary constraints permanently, see what happens
+            if tmp_constraints is not None:
+                for constr, vars in tmp_constraints:
+                    randobj.add_constraint(constr, vars)
+                add_results = self.randomize_and_time(randobj, iterations, tmp_values=tmp_values)
+                tmp_check(add_results)
 
         # Test again with seed 0, ensuring results are the same
         randobj0 = randobj_getter(0)
@@ -128,6 +134,16 @@ class RandObjTestsBase(unittest.TestCase):
                 post_tmp_results0,
                 "Non-determinism detected, results were not equal after temp constraints"
             )
+            # Add temporary constraints permanently, see what happens
+            if tmp_constraints is not None:
+                for constr, vars in tmp_constraints:
+                    randobj0.add_constraint(constr, vars)
+                add_results0 = self.randomize_and_time(randobj0, iterations, tmp_values=tmp_values)
+                self.assertListOfDictsEqual(
+                    add_results,
+                    add_results0,
+                    "Non-determinism detected, results were not equal after constraints added"
+                )
 
         # Test with seed 1, ensuring results are different
         randobj1 = randobj_getter(1)

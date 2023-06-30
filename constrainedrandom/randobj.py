@@ -41,7 +41,7 @@ class RandObj:
         rand_obj.add_rand_var('eight_bits', bits=8, constraints=(lambda x : x != 0))
 
         # Add a multi-variable constraint
-        rand_obj.add_multi_var_constraint(lambda x, y : x != y, ('one_to_nine', 'eight_bits'))
+        rand_obj.add_constraint(lambda x, y : x != y, ('one_to_nine', 'eight_bits'))
 
         # Produce one valid solution
         rand_obj.randomize()
@@ -181,17 +181,18 @@ class RandObj:
         self._problem_changed = True
         self.__dict__[name] = initial
 
-    def add_multi_var_constraint(self, multi_var_constraint: utils.Constraint, variables: Iterable[str]):
+    def add_constraint(self, constr: utils.Constraint, variables: Iterable[str]):
         '''
-        Add an aribtrary constraint that applies to more than one variable.
+        Add an aribtrary constraint that applies to one or more variable(s).
 
-        :param multi_var_constraint: A function (or callable) that accepts the random variables listed in ``variables``
-            as argument(s) and returns either ``True`` or ``False``.
+        :param constr: A function (or callable) that accepts the random variables listed in
+            ``variables`` as argument(s) and returns either ``True`` or ``False``.
             If the function returns ``True`` when passed the variables, the constraint is satisfied.
-        :param variables: A tuple/list of variables affected by this constraint. The order matters,
-            this order will be preserved when passing variables into the constraint.
+        :param variables: A tuple/list of variables affected by this constraint.
+            The order matters, this order will be preserved when passing variables into the constraint.
         :return: ``None``
         :raises AssertionError: If any member of ``variables`` is not a valid random variable.
+        :raises TypeError: If type of ``variables`` is not str, list or tuple.
 
         :example:
 
@@ -201,18 +202,30 @@ class RandObj:
             # Add a constraint that a, b and c must be different values
             def not_equal(x, y, z):
                 return (x != y) and (y != z) and (x != z)
-            randobj.add_multi_var_constraint(not_equal, ('a', 'b', 'c'))
+            randobj.add_constraint(not_equal, ('a', 'b', 'c'))
 
             # Add a constraint that a is less than b
-            randobj.add_multi_var_constraint(lambda x, y: x < y, ('a', 'b'))
+            randobj.add_constraint(lambda x, y: x < y, ('a', 'b'))
 
             # Add a constraint that c must be more than double a but less than double b
-            randobj.multi_var_constraint(lambda a, b, c: (a * 2) < c < (b * 2), ('a', 'b', 'c'))
+            randobj.constr(lambda a, b, c: (a * 2) < c < (b * 2), ('a', 'b', 'c'))
         '''
-        for var in variables:
-            assert var in self._random_vars, f"Variable {var} was not in the set of random variables!"
-            self._constrained_vars.add(var)
-        self._constraints.append((multi_var_constraint, variables))
+        if isinstance(variables, str):
+            # Single-variable constraint
+            self._random_vars[variables].add_constraint(constr)
+        elif isinstance(variables, list) or isinstance(variables, tuple):
+            if len(variables) == 1:
+                # Single-variable constraint
+                self._random_vars[variables[0]].add_constraint(constr)
+            else:
+                # Multi-variable constraint
+                for var in variables:
+                    assert var in self._random_vars, \
+                        f"Variable {var} was not in the set of random variables!"
+                    self._constrained_vars.add(var)
+                self._constraints.append((constr, variables))
+        else:
+            raise TypeError(f"{variables=} must be of type str, tuple or list")
         self._problem_changed = True
 
     def pre_randomize(self) -> None:

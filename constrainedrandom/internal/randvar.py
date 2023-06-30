@@ -74,13 +74,18 @@ class RandVar:
         self.fn = fn
         self.args = args
         self.constraints = constraints if constraints is not None else []
-        if not (isinstance(self.constraints, tuple) or isinstance(self.constraints, list)):
-            self.constraints = (self.constraints,)
+        assert isinstance(self.constraints, list) or isinstance(self.constraints, tuple), \
+            "constraints was bad type, should be list or tuple"
+        if not isinstance(self.constraints, list):
+            self.constraints = list(self.constraints)
         self.list_constraints = list_constraints if list_constraints is not None else []
-        if not (isinstance(self.list_constraints, tuple) or isinstance(self.list_constraints, list)):
-            self.list_constraints = (self.list_constraints,)
+        assert isinstance(self.list_constraints, list) or isinstance(self.list_constraints, tuple), \
+            "list_constraints was bad type, should be list or tuple"
+        if not isinstance(self.list_constraints, list):
+            self.list_constraints = list(self.list_constraints)
         # Default strategy is to randomize and check the constraints.
-        self.check_constraints = len(self.constraints) > 0 or len(self.list_constraints) > 0
+        # List constraints are always checked.
+        self.check_constraints = len(self.constraints) > 0
         self.randomizer = self.create_randomizer()
 
     def create_randomizer(self) -> Callable:
@@ -128,12 +133,14 @@ class RandVar:
                 problem.addVariable(self.name, self.domain)
                 for con in self.constraints:
                     problem.addConstraint(con, (self.name,))
-                # Produces a list of dictionaries
+                # Produces a list of dictionaries - index it up front for very marginal
+                # performance gains
                 solutions = problem.getSolutions()
+                solution_list = [s[self.name] for s in solutions]
                 def solution_picker(solns):
-                    return self._get_random().choice(solns)[self.name]
+                    return self._get_random().choice(solns)
                 self.check_constraints = False
-                return partial(solution_picker, solutions)
+                return partial(solution_picker, solution_list)
             elif is_range:
                 return partial(self._get_random().randrange, self.domain.start, self.domain.stop)
             elif is_list_or_tuple:
@@ -143,6 +150,32 @@ class RandVar:
             else:
                 raise TypeError(f'RandVar was passed a domain of a bad type - {self.domain}. '
                                 'Domain should be a range, list, tuple, dictionary or other Iterable.')
+
+    def add_constraint(self, constr: utils.Constraint) -> None:
+        '''
+        Add a single constraint to this variable.
+
+        :param constr: Constraint to add.
+        '''
+        # Determine whether it's a list constraint or just
+        # a scalar constraint. It's important to get this right
+        # as it will be much more performant if scalar constraints
+        # are grouped together.
+        added = False
+        if self.length > 0:
+            try:
+                # This will be fine if it's a list-based constraint
+                dummy_val = self.randomize_once(self.constraints, self.check_constraints)
+                constr([dummy_val])
+                self.list_constraints.append(constr)
+                added = True
+            except (IndexError, TypeError):
+                # It wasn't a list-based constraint
+                pass
+        if not added:
+            self.constraints.append(constr)
+            self.check_constraints = True
+            self.randomizer = self.create_randomizer()
 
     def _get_random(self) -> random.Random:
         '''

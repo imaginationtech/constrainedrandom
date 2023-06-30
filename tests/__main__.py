@@ -43,7 +43,7 @@ class RandObjTests(utils.RandObjTestsBase):
             r.add_rand_var("bob", domain={0: 9, 1: 1})
             def not_3(foo):
                 return foo != 3
-            r.add_rand_var("dan", domain=range(5), constraints=not_3)
+            r.add_rand_var("dan", domain=range(5), constraints=(not_3,))
             def custom_fn(arg):
                 return arg + 1
             r.add_rand_var("joe", fn=custom_fn, args=(1,))
@@ -77,7 +77,7 @@ class RandObjTests(utils.RandObjTestsBase):
             r.add_rand_var("c", domain=range(5,10))
             def abc(a, b, c):
                 return a < b < c
-            r.add_multi_var_constraint(abc, ("a","b","c"))
+            r.add_constraint(abc, ("a","b","c"))
             return r
 
         def check(results):
@@ -99,7 +99,7 @@ class RandObjTests(utils.RandObjTestsBase):
             r.add_rand_var("y", domain=range(100), order=1)
             def plus_one(x, y):
                 return y == x + 1
-            r.add_multi_var_constraint(plus_one, ("x", "y"))
+            r.add_constraint(plus_one, ("x", "y"))
             return r
 
         def check(results):
@@ -124,11 +124,11 @@ class RandObjTests(utils.RandObjTestsBase):
             r.add_rand_var("b", domain=range(100), order=1)
             def mul_lt1000(a, b):
                 return a * b < 1000
-            r.add_multi_var_constraint(mul_lt1000, ('a', 'b'))
+            r.add_constraint(mul_lt1000, ('a', 'b'))
             r.add_rand_var("c", domain=range(100), order=2)
             def sum_lt100(a, b, c):
                 return a + b + c < 100
-            r.add_multi_var_constraint(sum_lt100, ('a', 'b', 'c'))
+            r.add_constraint(sum_lt100, ('a', 'b', 'c'))
             return r
 
         def check(results):
@@ -564,7 +564,7 @@ class RandObjTests(utils.RandObjTestsBase):
             r.add_rand_var('x', domain=range(100), order=1)
             def in_list(x, listvar):
                 return x in listvar
-            r.add_multi_var_constraint(in_list, ('x', 'listvar'))
+            r.add_constraint(in_list, ('x', 'listvar'))
             return r
 
         def check(results):
@@ -579,7 +579,6 @@ class RandObjTests(utils.RandObjTestsBase):
                 self.assertIn(result['x'], result['listvar'])
 
         self.randobj_test(get_randobj, 30, check)
-
 
     def test_list_unique(self):
         '''
