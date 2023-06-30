@@ -103,6 +103,7 @@ class RandObj:
         list_constraints: Optional[Iterable[utils.Constraint]]=None,
         length: int=0,
         order: int=0,
+        initial: Any=None,
     ) -> None:
         '''
         Add a random variable to the object.
@@ -129,6 +130,7 @@ class RandObj:
         :param length: Specify a length > 0 to turn this variable into a list of random
             values. A value of 0 means a scalar value. A value >= 1 means a list of that length.
         :param order: The solution order for this variable with respect to other variables.
+        :param initial: Initial value to assign to the variable prior to randomizing.
         :return: ``None``
         :raises AssertionError: If inputs are not valid.
 
@@ -177,6 +179,7 @@ class RandObj:
             max_domain_size=self._max_domain_size,
         )
         self._problem_changed = True
+        self.__dict__[name] = initial
 
     def add_multi_var_constraint(self, multi_var_constraint: utils.Constraint, variables: Iterable[str]):
         '''
@@ -350,7 +353,7 @@ class RandObj:
         This is mainly provided for testing purposes.
 
         Note that individual variables can be accessed as member variables of
-        a RandObj instance once randomized, e.g.
+        a RandObj instance, e.g.
 
         .. code-block:: python
 
@@ -360,10 +363,6 @@ class RandObj:
             print(randobj.a)
 
         :return: dictionary of the results from the most recent randomization.
-        :raises RuntimeError: if :func:`randomize` hasn't been called first.
         '''
-        try:
-            # Return a new dict object rather than a reference to this object's __dict__
-            return {k: self.__dict__[k] for k in self._random_vars.keys()}
-        except KeyError as e:
-            raise RuntimeError("Can't call .get_results() until .randomize() has been called at least once.")
+        # Return a new dict object rather than a reference to this object's __dict__
+        return {k: self.__dict__[k] for k in self._random_vars.keys()}
