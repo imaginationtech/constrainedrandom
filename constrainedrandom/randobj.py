@@ -343,6 +343,7 @@ class RandObj:
                 # Only 'cache' the problem if it's the base problem with no extra constraints
                 if not problem_changed:
                     self._multi_var_problem = multi_var_problem
+                    self._problem_changed = False
             else:
                 multi_var_problem = self._multi_var_problem
             result.update(multi_var_problem.solve(with_values))
