@@ -600,6 +600,36 @@ class RandObjTests(utils.RandObjTestsBase):
 
         self.randobj_test(get_randobj, 1000, check)
 
+    def test_list_tmp_constraints(self):
+        '''
+        Test a randomized list with temporary constraints.
+        '''
+        def get_randobj(seed):
+            r = RandObj(Random(seed))
+            r.add_rand_var('listvar', domain=range(10), length=10)
+            return r
+
+        def check(results):
+            for result in results:
+                self.assertIsInstance(result['listvar'], list, "Var with length > 0 wasn't a list")
+                for x in result['listvar']:
+                    self.assertIn(x, range(10), "Value was wrongly randomized")
+
+        def temp_constr(listvar):
+            for x in listvar:
+                if x == 5:
+                    return False
+            return True
+        tmp_constraints = [(temp_constr, ('listvar',))]
+
+        def tmp_check(results):
+            check(results)
+            for result in results:
+                for x in result['listvar']:
+                    self.assertNotEqual(x, 5, "Temp constraint not respected")
+
+        self.randobj_test(get_randobj, 100, check, tmp_constraints, tmp_check)
+
 
 def parse_args():
     parser = ArgumentParser(description='Run unit tests for constrainedrandom library')
