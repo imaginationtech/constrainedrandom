@@ -4,7 +4,7 @@
 import constraint
 import random
 from collections import defaultdict
-from typing import Any, Callable, Dict, Iterable, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Iterable, List, Optional
 
 from . import utils
 from .internal.multivar import MultiVarProblem
@@ -60,10 +60,10 @@ class RandObj:
         # Prefix 'internal use' variables with '_', as randomized results are populated to the class
         self._random = _random
         self._random_vars = {}
-        self._constraints = []
+        self._constraints : List[utils.ConstraintAndVars] = []
         self._constrained_vars = set()
         self._max_iterations = max_iterations
-        self._max_domain_size =max_domain_size
+        self._max_domain_size = max_domain_size
         self._naive_solve = True
         self._problem_changed = False
 
@@ -240,7 +240,8 @@ class RandObj:
         self,
         *,
         with_values: Optional[Dict[str, Any]]=None,
-        with_constraints: Optional[Iterable[Tuple[utils.Constraint, Iterable[str]]]]=None,
+        with_constraints: Optional[Iterable[utils.ConstraintAndVars]]=None,
+        debug: bool=False,
     ) -> None:
         '''
         Randomizes all random variables, applying all constraints provided.
@@ -251,6 +252,8 @@ class RandObj:
         :param with_constraints: Temporary constraints for this randomization only.
             List of tuples, consisting of a constraint function and an iterable
             containing the variables it applies to.
+        :param debug: ``True`` to run in debug mode. Slower, but collects
+            all debug info along the way and not just the final failure.
         :raises RandomizationError: If no solution is found within defined limits.
         '''
         self.pre_randomize()
@@ -295,7 +298,7 @@ class RandObj:
                 result[name] = with_values[name]
             else:
                 tmp_constraints = tmp_single_var_constraints.get(name, [])
-                result[name] = random_var.randomize(tmp_constraints)
+                result[name] = random_var.randomize(tmp_constraints, debug)
 
         # If there are constraints, first try just to solve naively by randomizing the values.
         # This will be faster than constructing a MultiVarProblem if the constraints turn out
@@ -326,7 +329,7 @@ class RandObj:
                             continue
                         else:
                             tmp_constraints = tmp_single_var_constraints.get(var, [])
-                            result[var] = self._random_vars[var].randomize(tmp_constraints)
+                            result[var] = self._random_vars[var].randomize(tmp_constraints, debug)
                     attempts += 1
 
         # If constraints are still not satisfied by this point, construct a multi-variable
@@ -346,7 +349,7 @@ class RandObj:
                     self._problem_changed = False
             else:
                 multi_var_problem = self._multi_var_problem
-            result.update(multi_var_problem.solve(with_values))
+            result.update(multi_var_problem.solve(with_values, debug))
 
         # Update this object such that the results of randomization are available as member variables
         self.__dict__.update(result)

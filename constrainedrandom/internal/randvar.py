@@ -8,6 +8,7 @@ from typing import Any, Callable, Iterable, Optional, Union
 import random
 
 from .. import utils
+from ..debug import RandomizationDebugInfo, RandomizationFail
 from ..random import dist
 
 
@@ -242,12 +243,14 @@ class RandVar:
             # Beware that this may be an extremely large domain.
             return product(self.domain, repeat=self.length)
 
-    def randomize_once(self, constraints: Iterable[utils.Constraint], check_constraints: bool) -> Any:
+    def randomize_once(self, constraints: Iterable[utils.Constraint], check_constraints: bool, debug: bool) -> Any:
         '''
         Get one random value that satisfies the constraints.
 
         :param constraints: The constraints that apply to this randomization.
         :param check_constraints: Whether constraints need to be checked.
+        :param debug: ``True`` to run in debug mode. Slower, but collects
+            all debug info along the way and not just the final failure.
         :return: A random value for the variable, respecting the constraints.
         :raises RandomizationError: When the problem cannot be solved in fewer than
             the allowed number of iterations.
@@ -257,20 +260,37 @@ class RandVar:
             return value
         value_valid = False
         iterations = 0
+        if debug:
+            # Collect failures as we go along
+            debug_fail = RandomizationFail([self.name],
+                [(c, (self.name,)) for c in constraints])
         while not value_valid:
             if iterations == self.max_iterations:
-                raise utils.RandomizationError("Too many iterations, can't solve problem")
+                if not debug:
+                    # Just capture the most recent value
+                    debug_fail = RandomizationFail([self.name],
+                        [(c, (self.name,)) for c in constraints])
+                debug_fail.add_values({self.name: value})
+                debug_info = RandomizationDebugInfo()
+                debug_info.add_failure(debug_fail)
+                raise utils.RandomizationError("Too many iterations, can't solve problem", debug_fail)
             problem = constraint.Problem()
             problem.addVariable(self.name, (value,))
             for con in constraints:
                 problem.addConstraint(con, (self.name,))
             value_valid = problem.getSolution() is not None
             if not value_valid:
+                if debug:
+                    # Capture all failing values as we go
+                    debug_fail.add_values({self.name: value})
                 value = self.randomizer()
             iterations += 1
         return value
 
-    def randomize(self, temp_constraints:Union[Iterable[utils.Constraint], None]=None) -> Any:
+    def randomize(
+        self,
+        temp_constraints: Optional[Iterable[utils.Constraint]]=None,
+        debug: bool=False) -> Any:
         '''
         Returns a random value based on the definition of this random variable.
         Does not modify the state of the :class:`RandVar` instance.
@@ -290,9 +310,9 @@ class RandVar:
             check_constraints = True
             constraints += temp_constraints
         if self.length == 0:
-            return self.randomize_once(constraints, check_constraints)
+            return self.randomize_once(constraints, check_constraints, debug)
         elif self.length == 1:
-            return [self.randomize_once(constraints, check_constraints)]
+            return [self.randomize_once(constraints, check_constraints, debug)]
         else:
             values = []
             # Create list of values, checking as we go that list constraints
@@ -314,23 +334,42 @@ class RandVar:
                         problem.addConstraint(con, (self.name,))
                     solutions = problem.getSolutions()
                     if len(solutions) == 0:
-                        raise utils.RandomizationError("Problem was unsolvable.")
+                        debug_fail = RandomizationFail([self.name],
+                            [(con, (self.name,)) for con in list_constraints])
+                        debug_info = RandomizationDebugInfo()
+                        debug_info.add_failure(debug_fail)
+                        raise utils.RandomizationError("Problem was unsolvable.", debug_info)
                     values = self._get_random().choice(solutions)[self.name]
                 else:
                     # Otherwise, just randomize and check.
-                    new_value = self.randomize_once(constraints, check_constraints)
+                    new_value = self.randomize_once(constraints, check_constraints, debug)
                     values_valid = not check_list_constraints or i == 0
                     iterations = 0
+                    if debug:
+                        # Collect failures as we go along
+                        debug_fail = RandomizationFail([self.name],
+                            [(c, (self.name,)) for c in self.list_constraints])
                     while not values_valid:
                         if iterations == self.max_iterations:
-                            raise utils.RandomizationError("Too many iterations, can't solve problem")
+                            if not debug:
+                                # Create the debug info 'late', only capturing the final
+                                # set of values.
+                                debug_fail = RandomizationFail([self.name],
+                                    [(c, (self.name,)) for c in self.list_constraints])
+                            debug_fail.add_values({self.name: values + [new_value]})
+                            debug_info = RandomizationDebugInfo()
+                            debug_info.add_failure(debug_fail)
+                            raise utils.RandomizationError("Too many iterations, can't solve problem", debug_info)
                         problem = constraint.Problem()
                         problem.addVariable(self.name, (values + [new_value],))
                         for con in self.list_constraints:
                             problem.addConstraint(con, (self.name,))
                         values_valid = problem.getSolution() is not None
                         if not values_valid:
-                            new_value = self.randomize_once(constraints, check_constraints)
+                            if debug:
+                                # Capture all failing values as we go
+                                debug_fail.add_values({self.name: values + [new_value]})
+                            new_value = self.randomize_once(constraints, check_constraints, debug)
                             iterations += 1
                     values.append(new_value)
             return values

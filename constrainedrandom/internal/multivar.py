@@ -6,6 +6,7 @@ from collections import defaultdict
 from typing import Any, Dict, Iterable, List, Optional, TYPE_CHECKING, Tuple, Union
 
 from .. import utils
+from ..debug import RandomizationDebugInfo, RandomizationFail
 
 if TYPE_CHECKING:
     from ..randobj import RandObj
@@ -20,8 +21,8 @@ class MultiVarProblem:
 
     :param parent: The :class:`RandObj` instance that owns this instance.
     :param vars: The dictionary of names and :class:`RandVar` instances this problem consists of.
-    :param constraints: The list or tuple of constraints associated with
-        the random variables.
+    :param constraints: An iterable of tuples of (constraint, (variables,...)) denoting
+        the constraints and the variables they apply to.
     :param max_iterations: The maximum number of failed attempts to solve the randomization
         problem before giving up.
     :param max_domain_size: The maximum size of domain that a constraint satisfaction problem
@@ -35,7 +36,7 @@ class MultiVarProblem:
         self,
         parent: 'RandObj',
         vars: Dict[str, 'RandVar'],
-        constraints: Iterable[utils.Constraint],
+        constraints: Iterable[utils.ConstraintAndVars],
         max_iterations: int,
         max_domain_size: int,
     ) -> None:
@@ -105,8 +106,8 @@ class MultiVarProblem:
         group: List['RandVar'],
         solved_vars: List[str],
         problem: constraint.Problem,
-        constraints: List[utils.Constraint],
-    ) -> Tuple[List[str], List['RandVar'], List[utils.Constraint]]:
+        constraints: List[utils.ConstraintAndVars],
+    ) -> Tuple[List[str], List['RandVar'], List[utils.ConstraintAndVars]]:
         '''
         Determines which variables in the group can be solved via a
         constraint problem and which ones must be randomized and checked.
@@ -121,7 +122,7 @@ class MultiVarProblem:
         :return: A tuple of 1) a list the names of the variables in the group,
             2) a list of variables that must be randomized rather than solved
             via a constraint problem,
-            3) a list of constraints that won't be applied for this group.
+            3) a list of constraints and variables that won't be applied for this group.
         '''
         # Construct a constraint problem where possible. A variable must have a domain
         # in order to be part of the problem. If it doesn't have one, it must just be
@@ -163,6 +164,8 @@ class MultiVarProblem:
         problem: constraint.Problem,
         max_iterations: int,
         solutions_per_group: int,
+        debug_info: RandomizationDebugInfo,
+        debug: bool,
     ) -> Union[List[Dict[str, Any]], None]:
         '''
         Attempts to solve one group of variables. Preferentially uses a constraint
@@ -178,17 +181,28 @@ class MultiVarProblem:
         :solutions_per_group: How many random values to produce before attempting
             to solve the constraint satisfaction problem. A lower value will run
             quicker but has less chance to succeed.
+        :param debug_info: :class:`RandomizationDebugInfo`` instance to collect
+            any debug info.
+        :param debug: ``True`` to run in debug mode. Slower, but collects
+            all debug info along the way and not just the final failure.
         :return: A list of all possible solutions for the group, or ``None`` if
             it can't be solved within ``max_iterations`` attempts.
         '''
         # Problem is ready to solve, apart from random variables
         solutions = []
         attempts = 0
+        if debug:
+            debug_fail = RandomizationFail([var.name for var in rand_vars], list(problem._constraints))
         if len(rand_vars) > 0:
             # If we have additional random variables, randomize and check
             while True:
                 if attempts >= max_iterations:
                     # We have failed, give up
+                    if not debug:
+                        debug_fail = RandomizationFail([var.name for var in rand_vars],
+                            list(problem._constraints))
+                    debug_fail.add_values(dict(problem._variables))
+                    debug_info.add_failure(debug_fail)
                     return None
                 for var in rand_vars:
                     # Add random variables in with a concrete value
@@ -204,6 +218,9 @@ class MultiVarProblem:
                     break
                 else:
                     attempts += 1
+                    if debug:
+                        # Add all randomization failures to failure for debugging
+                        debug_fail.add_values(dict(problem._variables))
                     for var in rand_vars:
                         # Remove from problem, they will be re-added with different concrete values
                         del problem._variables[var.name]
@@ -212,6 +229,10 @@ class MultiVarProblem:
             solutions = problem.getSolutions()
             if len(solutions) == 0:
                 # Failed
+                if not debug:
+                    debug_fail = RandomizationFail([var.name for var in rand_vars],
+                        list(problem._constraints))
+                debug_info.add_failure(debug_fail)
                 return None
 
         return solutions
@@ -220,7 +241,9 @@ class MultiVarProblem:
         self,
         groups: List[List['RandVar']],
         with_values: Dict[str, Any],
-        max_iterations:int,
+        max_iterations: int,
+        debug_info: RandomizationDebugInfo,
+        debug: bool,
         solutions_per_group: Optional[int]=None,
     ) -> Union[Dict[str, Any], None]:
         '''
@@ -244,6 +267,10 @@ class MultiVarProblem:
             If ``solutions_per_group`` is ``None``, Solve constraint problem 'thoroughly',
             i.e. keep all possible results between iterations.
             Slow, but will usually converge.
+        :param debug_info: :class:`RandomizationDebugInfo`` instance to collect
+            any debug info.
+        :param debug: ``True`` to run in debug mode. Slower, but collects
+            all debug info along the way and not just the final failure.
         :returns: A valid solution to the problem, in the form of a dictionary with the
             names of the random variables as keys and the valid solution as the values.
             Returns ``None`` if no solution is found within the allotted ``max_iterations``.
@@ -276,7 +303,7 @@ class MultiVarProblem:
                 group,
                 solved_vars,
                 problem,
-                constraints
+                constraints,
             )
 
             group_solutions = None
@@ -313,7 +340,9 @@ class MultiVarProblem:
                     rand_vars,
                     problem,
                     max_iterations,
-                    solutions_per_group
+                    solutions_per_group,
+                    debug_info,
+                    debug,
                 )
 
                 attempts += 1
@@ -331,7 +360,11 @@ class MultiVarProblem:
 
         return self.parent._get_random().choice(solutions)
 
-    def solve(self, with_values: Optional[Dict[str, Any]]=None) -> Union[Dict[str, Any], None]:
+    def solve(
+        self,
+        with_values: Optional[Dict[str, Any]]=None,
+        debug: bool=False,
+    ) -> Union[Dict[str, Any], None]:
         '''
         Attempt to solve the variables with respect to the constraints.
 
@@ -339,6 +372,8 @@ class MultiVarProblem:
             randomization.
         :return: One valid solution for the randomization problem, represented as
             a dictionary with keys referring to the named variables.
+        :param debug: ``True`` to run in debug mode. Slower, but collects
+            all debug info along the way and not just the final failure.
         :raises RandomizationError: When the problem cannot be solved in fewer than
             the allowed number of iterations.
         '''
@@ -357,14 +392,23 @@ class MultiVarProblem:
         # So, reduce iterations_per_attempt by an order of magnitude.
         iterations_per_sparsity = self.max_iterations
         iterations_per_attempt = self.max_iterations // 10
+        # Create debug info in case of failure
+        debug_info = RandomizationDebugInfo()
         for sparsity in sparsities:
             for _ in range(iterations_per_sparsity):
-                solution = self.solve_groups(groups, with_values, iterations_per_attempt, sparsity)
+                solution = self.solve_groups(
+                    groups,
+                    with_values,
+                    iterations_per_attempt,
+                    debug_info,
+                    debug,
+                    sparsity,
+                )
                 if solution is not None and len(solution) > 0:
                     return solution
 
         # Try 'thorough' method - no backup plan if this fails
-        solution = self.solve_groups(groups, with_values, self.max_iterations)
+        solution = self.solve_groups(groups, with_values, debug_info, debug, self.max_iterations)
         if solution is None:
-            raise utils.RandomizationError("Could not solve problem.")
+            raise utils.RandomizationError("Could not solve problem.", debug_info)
         return solution
