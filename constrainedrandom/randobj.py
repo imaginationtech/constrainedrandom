@@ -290,6 +290,9 @@ class RandObj:
                     for constr in constrs:
                         constraints.append((constr, (var,)))
 
+        # Don't allow non-determinism when iterating over a set
+        constrained_vars = sorted(constrained_vars)
+
         # Process concrete values - use these preferentially
         with_values = with_values if with_values is not None else {}
 

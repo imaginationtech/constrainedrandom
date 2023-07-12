@@ -210,7 +210,7 @@ class MultiVarProblem:
                         var_domain = set()
                         for _ in range(solutions_per_group):
                             var_domain.add(var.randomize())
-                        problem.addVariable(var.name, list(var_domain))
+                        problem.addVariable(var.name, sorted(var_domain))
                     else:
                         problem.addVariable(var.name, (var.randomize(),))
                 solutions = problem.getSolutions()
