@@ -10,6 +10,15 @@ from typing import Any, Dict, List
 from constrainedrandom import RandObj
 
 
+def assertListOfDictsEqual(instance, list0, list1, msg) -> None:
+    '''
+    This is missing from unittest. It doesn't like it when two large lists of dictionaries
+    are different and compared using `assertListEqual` or `assertEqual`.
+    '''
+    for i, j in zip(list0, list1):
+        instance.assertDictEqual(i, j, msg)
+
+
 class RandObjTestBase(unittest.TestCase):
     '''
     Provides useful utilities for testing features of constrainedrandom.
@@ -83,13 +92,6 @@ class RandObjTestBase(unittest.TestCase):
         print(f'{self.get_full_test_name()} took {time_taken:.4g}s for {iterations} iterations ({hz:.1f}Hz)')
         return results
 
-    def assertListOfDictsEqual(self, list0, list1, msg) -> None:
-        '''
-        This is missing from unittest. It doesn't like it when two large lists of dictionaries
-        are different and compared using `assertListEqual` or `assertEqual`.
-        '''
-        for i, j in zip(list0, list1):
-            self.assertDictEqual(i, j, msg)
 
     def test_randobj(self) -> None:
         '''
@@ -125,18 +127,20 @@ class RandObjTestBase(unittest.TestCase):
         # Test again with seed 0, ensuring results are the same
         randobj0 = self.get_randobj(0)
         results0 = self.randomize_and_time(randobj0, self.iterations)
-        self.assertListOfDictsEqual(results, results0, "Non-determinism detected, results were not equal")
+        assertListOfDictsEqual(self, results, results0, "Non-determinism detected, results were not equal")
         if do_tmp_checks:
             # Check applying temporary constraints is also deterministic
             tmp_results0 = self.randomize_and_time(randobj0, self.iterations, tmp_constraints, tmp_values)
-            self.assertListOfDictsEqual(
+            assertListOfDictsEqual(
+                self,
                 tmp_results,
                 tmp_results0,
                 "Non-determinism detected, results were not equal with temp constraints"
             )
             # Check temporary constraints don't break base randomization determinism
             post_tmp_results0 = self.randomize_and_time(randobj0, self.iterations)
-            self.assertListOfDictsEqual(
+            assertListOfDictsEqual(
+                self,
                 post_tmp_results,
                 post_tmp_results0,
                 "Non-determinism detected, results were not equal after temp constraints"
@@ -146,7 +150,8 @@ class RandObjTestBase(unittest.TestCase):
                 for constr, vars in tmp_constraints:
                     randobj0.add_constraint(constr, vars)
                 add_results0 = self.randomize_and_time(randobj0, self.iterations, tmp_values=tmp_values)
-                self.assertListOfDictsEqual(
+                assertListOfDictsEqual(
+                    self,
                     add_results,
                     add_results0,
                     "Non-determinism detected, results were not equal after constraints added"
