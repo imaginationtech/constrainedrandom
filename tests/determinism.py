@@ -7,6 +7,7 @@ Test determinism between processes.
 
 import os
 import subprocess
+import timeit
 import unittest
 
 
@@ -51,6 +52,8 @@ exit(0)
         # Capture the current env
         env = dict(os.environ)
         results = []
+        print("Testing thread-level determinism...")
+        start_time = timeit.default_timer()
         for hashseed in range(10):
             # Vary the PYTHONHASHSEED to introduce non-determinism in set/dict ordering
             env['PYTHONHASHSEED'] = str(hashseed)
@@ -61,3 +64,6 @@ exit(0)
                 # Check these results are the same as the rest
                 self.assertEqual(results[-1], result, "Results were not deterministic when PYTHONHASHSEED changes.")
             results.append(result)
+        end_time = timeit.default_timer()
+        total_time = end_time - start_time
+        print(f"... done testing thread-level determinism. Took {total_time:.4g}s.")
