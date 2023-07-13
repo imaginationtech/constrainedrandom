@@ -14,7 +14,8 @@ from argparse import ArgumentParser
 
 from . import testutils
 # Import all tests for unittest to run
-from .determinism import DeterminismTest
+from .bits import *
+from .determinism import *
 from .features.basic import *
 from .features.rand_list import *
 from .features.temp import *
