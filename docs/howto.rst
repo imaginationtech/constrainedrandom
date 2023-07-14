@@ -5,43 +5,102 @@ The following is a guide on how to use all the features of ``constrainedrandom``
 
 Code snippets are provided and the user is encouraged to try them out.
 
+The ``RandObj`` class
+---------------------
+
+The library provides one main user-facing class, ``RandObj``.
+
+This class can be instanced or inherited from to create randomization problems.
+
+Here is an example of creating an instance of the class:
+
+..  code-block:: python
+
+    from constrainedrandom import RandObj
+
+    # Create a problem where two random numbers
+    # between 0 and 9 must have a sum greater than 5.
+    randobj = RandObj()
+    randobj.add_rand_var("a", domain=range(10))
+    randobj.add_rand_var("b", domain=range(10))
+    def sum_gt_5(a, b):
+        return a + b > 5
+    randobj.add_constraint(sum_gt_5, ('a', 'b'))
+
+    randobj.randomize()
+    print("a", randobj.a, "b", randobj.b)
+
+Here is the same example implemented by inheriting from the class:
+
+..  code-block:: python
+
+    from constrainedrandom import RandObj
+
+    # Create a problem where two random numbers
+    # between 0 and 9 must have a sum greater than 5.
+    class SumGTFive(RandObj):
+
+        def __init__(self):
+            super().__init__()
+            self.add_rand_var("a", domain=range(10))
+            self.add_rand_var("b", domain=range(10))
+            def sum_gt_5(a, b):
+                return a + b > 5
+            self.add_constraint(sum_gt_5, ('a', 'b'))
+
+    randobj = SumGTFive()
+    randobj.randomize()
+    print("a", randobj.a, "b", randobj.b)
+
+
 Repeatability
 -------------
 
-The library provides two main user-facing classes, ``Random`` and ``RandObj``.
+The ``RandObj`` class uses the standard Python ``random`` package under the hood. ``random`` provides repeatable randomization when given the same seed.
 
-The ``Random`` class inherits from the standard Python ``random.Random`` class. It provides repeatable randomization when given the same seed.
+There are two ways to seed the ``random`` package, either globally or using an instance of the ``random.Random`` class.
 
-..  code-block:: python
+Global seeding
+______________
 
-    from constrainedrandom import Random
+The easiest way to ensure repeatability of a program with a given seed is to use global seeding of the ``random`` pacakage at the beginning of your program.
 
-    # Use seed 0
-    rand1 = Random(0)
-    for _ in range(5):
-        print(rand1.randrange(10))
-
-    # Use seed 0 again, this will produce the same 5 random values
-    rand2 = Random(0)
-    for _ in range(5):
-        print(rand2.randrange(10))
-
-The ``RandObj`` class accepts an instance of ``Random`` in its constructor.
-The usage model is to use one ``Random`` object per seed in a program, and to pass it to all the ``RandObj`` objects used in the program, to ensure that results are repeatable.
+Here is an example of ensuring repeatability using global seeding:
 
 ..  code-block:: python
 
-    from constrainedrandom import Random, RandObj
+    import random
+
+    # Use seed 0.
+    random.seed(0)
+    for _ in range(5):
+        print(random.randrange(10))
+
+    # Use seed 0 again, this will produce the same 5 random values.
+    random.seed(0)
+    for _ in range(5):
+        print(random.randrange(10))
+
+
+Here is an example how to ensure repeatability of ``RandObj`` behaviour using global seeding:
+
+..  code-block:: python
+
+    import random
+
+    from constrainedrandom import RandObj
 
     def my_function(seed, name):
-        rand = Random(seed)
-        # Create two random objects with the same shared random generator.
-        randobj1 = RandObj(rand)
+        # Seed the random package globally.
+        random.seed(seed)
+        # Don't pass anything in the constructor to RandObj,
+        # rely on random seeding for repeatability.
+        randobj1 = RandObj()
         randobj1.add_rand_var("a", domain=range(10))
-        randobj2 = RandObj(rand)
+        randobj2 = RandObj()
         randobj2.add_rand_var("b", bits=4)
 
-        # Create and print some random values
+        # Create and print some random values.
         values = []
         for _ in range(5):
             randobj1.randomize()
@@ -49,10 +108,63 @@ The usage model is to use one ``Random`` object per seed in a program, and to pa
             values.append(f"a={randobj1.a}, b={randobj2.b}")
         print(name, values)
 
-    # Using the same seed will produce the same results
+    # Using the same seed will produce the same results.
     my_function(0, "first call:")
     my_function(0, "second call:")
-    # Using a different seed produces different results
+    # Using a different seed produces different results.
+    my_function(1, "third call:")
+
+
+Object-based seeding
+____________________
+
+You can also manage repeatability by passing around an instance of ``random.Random``.
+
+Here is an example of ensuring repeatability using the ``random.Random`` class:
+
+..  code-block:: python
+
+    from random import Random
+
+    # Use seed 0.
+    rand1 = Random(0)
+    for _ in range(5):
+        print(rand1.randrange(10))
+
+    # Use seed 0 again, this will produce the same 5 random values.
+    rand2 = Random(0)
+    for _ in range(5):
+        print(rand2.randrange(10))
+
+The ``RandObj`` class accepts an instance of the ``random.Random`` class in its constructor. In this usage model, use one ``random.Random`` object per seed in a program, and to pass it to all the ``RandObj`` objects used in the program, to ensure that results are repeatable.
+
+..  code-block:: python
+
+    from random import Random
+
+    from constrainedrandom import RandObj
+
+    def my_function(seed, name):
+        # Create an instance of random.Random with the desired seed.
+        rand = Random(seed)
+        # Create two random objects based on the same shared random generator.
+        randobj1 = RandObj(rand)
+        randobj1.add_rand_var("a", domain=range(10))
+        randobj2 = RandObj(rand)
+        randobj2.add_rand_var("b", bits=4)
+
+        # Create and print some random values.
+        values = []
+        for _ in range(5):
+            randobj1.randomize()
+            randobj2.randomize()
+            values.append(f"a={randobj1.a}, b={randobj2.b}")
+        print(name, values)
+
+    # Using the same seed will produce the same results.
+    my_function(0, "first call:")
+    my_function(0, "second call:")
+    # Using a different seed produces different results.
     my_function(1, "third call:")
 
 Adding random variables
@@ -71,18 +183,23 @@ Using the ``bits`` argument to ``add_rand_var`` means that the random variable's
 
 ..  code-block:: python
 
-    from constrainedrandom import Random, RandObj
+    import random
 
-    rand = Random(0)
-    # Create an instance of RandObj
-    r = RandObj(rand)
-    # Add a random variable called 'fred', which is 8 bits wide
+    from constrainedrandom import RandObj
+
+    # Ensure repeatability.
+    random.seed(0)
+
+    # Create an instance of RandObj.
+    r = RandObj()
+    # Add a random variable called 'fred', which is 8 bits wide.
     r.add_rand_var('fred', bits=8)
-    # Add another random variable called 'bob', which is 4 bits wide
+    # Add another random variable called 'bob', which is 4 bits wide.
     r.add_rand_var('bob', bits=4)
-    # Randomize all variables
+    # Randomize all variables.
     r.randomize()
-    # Once randomized the first time, variables are attributes of the object
+    # The values of the randomizable variables are available
+    # as attributes of the object.
     print(r.fred)
     print(r.bob)
 
@@ -96,15 +213,20 @@ A "domain" denotes the possible values of the variable. A domain is one of:
 
 ..  code-block:: python
 
-    from constrainedrandom import Random, RandObj
+    import random
 
-    rand = Random(0)
-    r = RandObj(rand)
+    from constrainedrandom import RandObj
+
+    # Ensure repeatability.
+    random.seed(0)
+
+    # Create an instance of RandObj.
+    r = RandObj()
     # Add a random variable called 'foo',
-    # whose value is greater than or equal to 4 and less than 42
+    # whose value is greater than or equal to 4 and less than 42.
     r.add_rand_var('foo', domain=range(4, 42))
     # Add a random variable called 'bar',
-    # whose value is one of the first 5 prime numbers
+    # whose value is one of the first 5 prime numbers.
     r.add_rand_var('bar', domain=(2, 3, 5, 7, 11))
     # Add a random variable called 'baz',
     # whose value is a distribution weighted to choose 0 half of the time,
@@ -130,18 +252,23 @@ The custom function will be called to determine the value of the random variable
 
 ..  code-block:: python
 
-    from constrainedrandom import Random, RandObj
-
+    import random
     import time
 
-    rand = Random(0)
-    r = RandObj(rand)
+    from constrainedrandom import RandObj
+
+
+    # Ensure repeatability.
+    random.seed(0)
+
+    # Create an instance of RandObj.
+    r = RandObj()
     # Add a random variable called 'time',
     # whose value is determined by calling the function time.time
     r.add_rand_var('time', fn=time.time)
     # Add a random variable called 'time_plus_one',
     # whose value is determined by calling our custom function 'my_func'
-    # with argument 1
+    # with argument 1.
     def my_func(time_delta):
         return time.time() + time_delta
     r.add_rand_var('time_plus_one', fn=my_func, args=(1,))
@@ -157,19 +284,44 @@ The custom function will be called to determine the value of the random variable
 Sometimes, we want the custom function to perform procedural randomization, if it's easier to express what we want that way.
 
 .. note::
-    In order to maintain repeatability, the function should not perform randomization independent from the same instance of ``Random`` used to control the ``RandObj``'s seeding.
+    In order to maintain repeatability, if using the :ref:`Object-based seeding` approach, the function should not perform randomization independent from the same instance of ``Random`` used to control the ``RandObj``'s seeding.
+
+The following is OK because we are using global seeding:
+
+..  code-block:: python
+
+    import random
+
+    from constrainedrandom import RandObj
+
+
+    random.seed(0)
+
+    r = RandObj()
+
+    # Add a random variable called 'multiple_of_4',
+    # whose value is determined by calling the function rand_mul_by_4.
+
+    def rand_mul_by_4():
+        val = random.randrange(1,10)
+        return val * 4
+
+    r.add_rand_var('multiple_of_4', fn=rand_mul_by_4)
+    r.randomize()
 
 The following is OK because the function uses the same random seeding object as the ``RandObj`` instance that it is added to:
 
 ..  code-block:: python
 
-    from constrainedrandom import Random, RandObj
+    from random import Random
+
+    from constrainedrandom import RandObj
 
     rand = Random(0)
     r = RandObj(rand)
 
     # Add a random variable called 'multiple_of_4',
-    # whose value is determined by calling the function rand_mul_by_4
+    # whose value is determined by calling the function rand_mul_by_4.
 
     def rand_mul_by_4():
         val = rand.randrange(1,10)
@@ -183,13 +335,14 @@ However, the following is *not* OK because the ``rand_mul_by_4`` function is not
 ..  code-block:: python
 
     import random
-    from constrainedrandom import Random, RandObj
 
-    rand = Random(0)
+    from constrainedrandom import RandObj
+
+    rand = random.Random(0)
     r = RandObj(rand)
 
     # Add a random variable called 'multiple_of_4',
-    # whose value is determined by calling the function rand_mul_by_4
+    # whose value is determined by calling the function rand_mul_by_4.
 
     def rand_mul_by_4():
         val = random.randrange(1,10)
@@ -197,6 +350,57 @@ However, the following is *not* OK because the ``rand_mul_by_4`` function is not
 
     r.add_rand_var('multiple_of_4', fn=rand_mul_by_4)
     r.randomize()
+
+
+Random list variables
+_____________________
+
+Sometimes, we might want to produce a list of randomized values. ``constrainedrandom`` supports this. You can turn a random variable into a list by supplying the ``length`` argument. ``length=0`` is the default behaviour, i.e. a scalar value. ``length=1`` means a list of one randomized value, similarly ``length=N`` means a list of N randomized values.
+
+Here is an example of a randomized list variable.
+
+..  code-block:: python
+
+    import random
+
+    from constrainedrandom import RandObj
+
+    rand = random.Random(0)
+    r = RandObj(rand)
+    # Add a variable which is a list of 10 random values between 0 and 99
+    r.add_rand_var('listvar', domain=range(100), length=10)
+    r.randomize()
+
+See the section below on :ref:`List Constraints` to see how adding constraints to this kind of variable works.
+
+Initial values
+______________
+
+An initial value for a variable can be provided. This value is assigned to the variable before randomization takes place. By default, an un-randomized variable in a ``RandObj`` instance has the initial value ``None``.
+
+..  code-block:: python
+
+    import random
+
+    from constrainedrandom import RandObj
+
+    random.seed(0)
+    r = RandObj()
+
+    # No initial value supplied.
+    r.add_rand_var('a', bits=10)
+    # This will print `None`.
+    print(r.a)
+    # Initial value supplied.
+    r.add_rand_var('b', domain=range(100), initial='not defined')
+    # This will print `not defined`.
+    print(r.b)
+
+    # This will give the variables random values.
+    # After this, the initial value is no longer captured.
+    r.randomize()
+    print("a", r.a, "b", r.b)
+
 
 Constraints
 -----------
@@ -206,7 +410,7 @@ Constraints restrict the possible values of one or more of the random variables.
 There are two types of constraints:
 
 **Single-variable constraints**
-    affect one variable only, and must be added to the variable when ``add_rand_var`` is called.
+    affect one variable only.
 
 **Multi-variable constraints**
     affect more than one variable, and must be added to the ``RandObj`` instance after the associated variables are added.
@@ -229,19 +433,26 @@ This function returns ``True`` when called with a value that is not zero, and ``
     >>> not_zero(0)
     False
 
-Constraints should be used as sparingly as possible, as they are the main source of complexity when it comes to solving these problems.
+The ``add_constraint`` function is used to add constraints to a ``RandObj``. The variables that a constraint affects must have already been added to the problem before ``add_constraint`` is called.
+
+In general, constraints should be used as sparingly as possible, as they are the main source of complexity when it comes to solving these problems.
 
 Single-variable constraints
 ___________________________
 
 Single-variable constraints constrain one variable only. They are not as much of a burden as multi-variable constraints because they don't introduce dependencies between variables.
 
+They can be added when adding the variable with ``add_rand_var``, or afterwards with ``add_constraint``. For best performance, they should be added to a variable when ``add_rand_var`` is called.
+
 ..  code-block:: python
 
-    from constrainedrandom import Random, RandObj
+    import random
 
-    rand = Random(0)
-    r = RandObj(rand)
+    from constrainedrandom import RandObj
+
+
+    random.seed(0)
+    r = RandObj()
 
     # Add a random variable called 'plus_minus', which follows these rules:
     # -10 < plus_minus < 10
@@ -282,30 +493,234 @@ Sometimes, however, it is just much easier to express what you want with a const
         constraints=(not_reserved_values,)
     )
 
-The above simply restricts the values of ``address`` never to be ``0xdeadbeeef`` or ``0xcafef00d``, without otherwise affecting the distribution of values.
+The above simply restricts the values of ``address`` never to be ``0xdeadbeef`` or ``0xcafef00d``, without otherwise affecting the distribution of values.
+
+While it is recommended to add constraints to individual variables as they are added with ``add_rand_var``, it is also possible to add constraints to single variables with ``add_constraint``. This is especially useful when using inheritance patterns.
+
+..  code-block:: python
+
+    import random
+
+    from constrainedrandom import RandObj
+
+    random.seed(0)
+
+    # Create a problem that gives a random number
+    # between 0 and 99 which is not divisible by 3.
+    class NotDivisibleByThree(RandObj):
+
+        def __init__(self):
+            super().__init__()
+            def not_div_by_three(x):
+                return x % 3 != 0
+            self.add_rand_var("a", domain=range(100), constraints=[not_div_by_three])
+
+    randobj = NotDivisibleByThree()
+    randobj.randomize()
+    print("a", randobj.a)
+
+    # Create a problem with the same constraints as above,
+    # but also where the number must not be a multiple of 5.
+    class DivisibleByFive(NotDivisibleByThree):
+        def __init__(self):
+            super().__init__()
+            def div_by_five(x):
+                return x % 5 == 0
+            self.add_constraint(div_by_five, ('a',))
+
+    randobj = DivisibleByFive()
+    randobj.randomize()
+    print("a", randobj.a)
 
 Multi-variable constraints
 __________________________
 
-Usually the most useful part of declarative-style constrained random testing is adding constraints that affect the value of multiple variables. Unfortunately, it is also the biggest single source of complexity when solving problems.
+Usually the most useful part of declarative-style constrained random testing is adding constraints that affect the value of multiple variables. Unfortunately, it is also the biggest single source of complexity when solving problems. The ``add_constraint`` function can be called on a ``RandObj`` to add another constraint to a problem.
 
-In ``constrainedrandom`` multi-variable constraints are added to a ``RandObj`` instance separately from the variables they affect.
+In ``constrainedrandom``, multi-variable constraints are added to a ``RandObj`` instance *after* from the variables they affect have already been added.
 
 ..  code-block:: python
 
-    from constrainedrandom import Random, RandObj
+    import random
 
-    rand = Random(0)
-    r = RandObj(rand)
-    # Add two random variables whose sum should not overflow 16 bits
+    from constrainedrandom import RandObj
+
+
+    random.seed(0)
+    r = RandObj()
+    # Add two random variables whose sum should not overflow 16 bits.
     r.add_rand_var('op0', bits=16)
     r.add_rand_var('op1', bits=16)
     # Define a function to describe the constraint that the sum
-    # should not overflow 16 bits
+    # should not overflow 16 bits.
     def not_overflow_16(x, y):
         return (x + y) < (1 << 16)
-    r.add_multi_var_constraint(not_overflow_16, ('op0', 'op1'))
+    r.add_constraint(not_overflow_16, ('op0', 'op1'))
     r.randomize()
+
+
+List Constraints
+________________
+
+When creating a random list variable, we can specify two types of constraints - regular (or scalar) constraints which affect the scalar value in each element of the list, and list constraints wich affect the values of the list relative to each other. The ``list_constraints`` argument is used to supply constraints on the whole list.
+
+Here is an example of using mixed scalar and list constraints for a list variable. We also make use of the provided ``unique`` method which ensures there are no repeated elements.
+
+..  code-block:: python
+
+    import random
+
+    from constrainedrandom import RandObj
+    from constrainedrandom.utils import unique
+
+    rand = random.Random(0)
+    r = RandObj(rand)
+    # Add a variable which is a list of 10 random values between 0 and 99.
+    # Each value should be a multiple of 2 or 3.
+    # The list shouldn't have any repeated elements.
+    # The total sum of the elements shouldn't be below 50.
+    def multiple_of_2_or_3(val):
+        return (val % 2 == 0) or (val % 3 == 0)
+    def sum_gt_50(list_of_vals):
+        total = 0
+        for val in list_of_vals:
+            total += val
+        return total >= 50
+    r.add_rand_var(
+        'listvar',
+        domain=range(100),
+        length=10,
+        constraints=(multiple_of_2_or_3,),
+        list_constraints=(sum_gt_50, unique,)
+    )
+    r.randomize()
+
+If any multi-variable constraints are added that affect a list variable, its type should be treated as a list. E.g.:
+
+..  code-block:: python
+
+    import random
+
+    from constrainedrandom import RandObj
+    from constrainedrandom.utils import unique
+
+    rand = random.Random(0)
+    r = RandObj(rand)
+    # Add a variable which is a list of 10 random values between 0 and 99.
+    r.add_rand_var('listvar', domain=range(100), length=10)
+    # Add another variable
+    r.add_rand_var('a', domain=range(10))
+    # Add a multi-variable constraint, treating listvar's type as a list.
+    # Ensure 'a' does not appear in the list.
+    def not_in_list(a, listvar):
+        return not (a in listvar)
+    r.add_constraint(not_in_list, ('a', 'listvar'))
+    r.randomize()
+
+Temporary constraints
+_____________________
+
+Sometimes, we want to apply an extra constraint for one randomization attempt, without permanently modifying the underlying problem. In this case, we can apply one or more temporary constraints.
+
+To achieve this, we use the ``with_constraints`` argument to ``randomize``:
+
+..  code-block:: python
+
+    import random
+
+    from constrainedrandom import RandObj
+
+
+    random.seed(0)
+    r = RandObj()
+    # Add two random variables whose sum should not overflow 16 bits.
+    r.add_rand_var('op0', bits=16)
+    r.add_rand_var('op1', bits=16)
+    # Define a function to describe the constraint that the sum
+    # should not overflow 16 bits.
+    def not_overflow_16(x, y):
+        return (x + y) < (1 << 16)
+    r.add_constraint(not_overflow_16, ('op0', 'op1'))
+    r.randomize()
+    print(r.op0, r.op1)
+
+    # On this occasion, we need op0 to be an even number.
+    # Add a temporary constraint.
+    def is_even(x):
+        return x % 2 == 0
+    r.randomize(with_constraints=[(is_even, ('op0',))])
+    print(r.op0, r.op1)
+
+    # Go back to a randomization just with the original constraints.
+    r.randomize()
+    print(r.op0, r.op1)
+
+Temporary constraints can also apply to multiple variables:
+
+..  code-block:: python
+
+    # On this occasion, we need op0 + op1 to be an even number.
+    # Add a temporary constraint.
+    def is_even(x):
+        return x % 2 == 0
+    def sum_even(x, y):
+        return is_even(x + y)
+    r.randomize(with_constraints=[(sum_even, ('op0', 'op1'))])
+    print(r.op0, r.op1)
+
+.. note::
+    Temporary constraints make solving the constraint problem even harder than regular constraints, so please try to use them sparingly for best peformance.
+
+Temporary values
+________________
+
+Sometimes, for one randomization attempt, we want to specify a concrete value for a particular variable. In this case, we can randomize with values specified for one or more variable in the problem. This skips randomization for that variable and assigns it the value given. Other variables must still satisfy their constraints with respect to any variables with concrete values.
+
+To achieve this, we use the ``with_values`` argument to ``randomize``:
+
+..  code-block:: python
+
+    import random
+
+    from constrainedrandom import RandObj
+
+
+    random.seed(0)
+    r = RandObj()
+    # Add two random variables whose sum should not overflow 16 bits.
+    r.add_rand_var('op0', bits=16)
+    r.add_rand_var('op1', bits=16)
+    # Define a function to describe the constraint that the sum
+    # should not overflow 16 bits.
+    def not_overflow_16(x, y):
+        return (x + y) < (1 << 16)
+    r.add_constraint(not_overflow_16, ('op0', 'op1'))
+    r.randomize()
+    print(r.op0, r.op1)
+
+    # On this occasion, we want op0 to be equal to 42.
+    # The randomization will still ensure that 42 + op1 does not
+    # overflow 16 bits, as per the above constraint.
+    r.randomize(with_values={'op0': 42})
+    print(r.op0, r.op1)
+
+    # Randomization just with the original constraints.
+    r.randomize()
+    print(r.op0, r.op1)
+
+We can mix temporary values with temporary constraints:
+
+..  code-block:: python
+
+    # On this occasion, we want op0 to be equal to 42
+    # and op1 to be even.
+    # Again the original overflow constraint will still
+    # be satisfied.
+    def is_even(val):
+        return val % 2 == 0
+    r.randomize(with_constraints=[(is_even, ('op1',))], with_values={'op0': 42})
+    print(r.op0, r.op1)
+
 
 Ordering hints
 --------------
@@ -316,15 +731,18 @@ Consider this example:
 
 ..  code-block:: python
 
-    from constrainedrandom import Random, RandObj
+    import random
 
-    rand = Random(0)
-    r = RandObj(rand)
+    from constrainedrandom import RandObj
+
+
+    random.seed(0)
+    r = RandObj()
     r.add_rand_var("x", range(100))
     r.add_rand_var("y", range(100))
     def plus_one(x, y):
         return y == x + 1
-    r.add_multi_var_constraint(plus_one, ("x", "y"))
+    r.add_constraint(plus_one, ("x", "y"))
     r.randomize()
 
 In the above example, ``y`` must equal ``x + 1``. If we randomize the two variables at the same time and check the constraints, this is hard to get right randomly (a probability of 0.001).
@@ -365,7 +783,10 @@ Additional methods are provided to the user as part of ``RandObj``: ``pre_random
 
 ..  code-block:: python
 
-    from constrainedrandom import Random, RandObj
+    import random
+
+    from constrainedrandom import RandObj
+
 
     class MyRandObj(RandObj):
 
@@ -380,8 +801,8 @@ Additional methods are provided to the user as part of ``RandObj``: ``pre_random
         def post_randomize():
             print("goodbye")
 
-    rand = Random(0)
-    r = RandObj(rand)
+    random.seed(0)
+    r = RandObj()
     r.randomize()
     print(r.a)
 
@@ -395,3 +816,9 @@ Output:
 
 The methods can be overridden to do anything the user pleases. In the ``RandObj`` class definition they are left empty.
 
+Debugging
+---------
+
+If the randomization problem described by a ``RandObj`` is unsolvable (at least within a certain effort limit), calling ``randomize()`` will fail. It will throw a ``RandomizationError`` exception, containing an instance of the ``RandomizationDebugInfo`` class. The latter will contain debug info on the most recent set of variables that failed to randomize and meet the constraints.
+
+If ``debug=True`` is passed to ``randomize()``, this will slow execution down a lot, but will result in the ``RandomizationDebugInfo`` instance containing all the debug information for every failed randomization attempt during the call to ``randomize()``. This is a lot of information but might be helpful in spotting repeated patterns of constraints that cannot be solved.

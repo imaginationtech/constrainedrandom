@@ -41,6 +41,8 @@ For example, imagine you want to generate three random numbers between -10 and 1
 
     import random
 
+    random.seed(0)
+
     def get_three():
         '''
         Returns three random numbers between -10 and 10 that sum to zero.
@@ -68,17 +70,22 @@ With declarative-style constrained randomization, we can pretty easily read the 
 
 .. code-block:: python
 
+    import random
+
     from constrainedrandom import Random, RandObj
 
+    random.seed(0)
+
+    # Create randomizable object
+    r = RandObj()
+    r.add_rand_var('a', domain=range(-10,11))
+    r.add_rand_var('b', domain=range(-10,11))
+    r.add_rand_var('c', domain=range(-10,11))
+    def sum_zero(a, b, c):
+        return a + b + c == 0
+    r.add_constraint(sum_zero, ('a', 'b', 'c'))
+
     def constrainedrand_get_three():
-        rand = Random()
-        r = RandObj(rand)
-        r.add_rand_var('a', domain=range(-10,11))
-        r.add_rand_var('b', domain=range(-10,11))
-        r.add_rand_var('c', domain=range(-10,11))
-        def sum_zero(a, b, c):
-            return a + b + c == 0
-        r.add_multi_var_constraint(sum_zero, ('a', 'b', 'c'))
         r.randomize()
         return r.get_results()
 

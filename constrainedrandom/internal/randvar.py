@@ -221,7 +221,7 @@ class RandVar:
         of this random variable.
 
         :return: the variable's domain in a format that will work
-        with the ``constraint`` package.
+            with the ``constraint`` package.
         '''
         if self.length == 0:
             # Straightforward, scalar

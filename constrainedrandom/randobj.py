@@ -29,6 +29,7 @@ class RandObj:
     :example:
 
     .. code-block:: python
+
         import random
         from constrainedrandom import RandObj
 

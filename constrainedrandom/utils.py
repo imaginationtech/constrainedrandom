@@ -1,6 +1,11 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2023 Imagination Technologies Ltd. All Rights Reserved
 
+'''
+Miscellaneous utilities for the constrainedrandom package.
+'''
+
+
 from typing import Any, Callable, Dict, Iterable, List, Tuple, Union
 
 

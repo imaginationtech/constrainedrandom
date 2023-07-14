@@ -6,12 +6,7 @@ This is the documentation generated from the code. It is intended as developer-f
 User-facing classes
 -------------------
 
-These classes are user-facing and the API should remain the same.
-
-.. autoclass:: constrainedrandom.Random
-   :members:
-   :undoc-members:
-   :show-inheritance:
+These classes are user-facing and the API should remain the same. If changes are necessary, this should result in a major version increment.
 
 .. autoclass:: constrainedrandom.RandObj
    :members:
@@ -23,12 +18,27 @@ Internal classes
 
 These classes are internal-facing and the design can change if required.
 
-.. autoclass:: constrainedrandom.internal.randvar.RandVar
+.. automodule:: constrainedrandom.internal.randvar
    :members:
    :undoc-members:
    :show-inheritance:
 
-.. autoclass:: constrainedrandom.internal.multivar.MultiVarProblem
+.. automodule:: constrainedrandom.internal.multivar
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: constrainedrandom.utils
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: constrainedrandom.random
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: constrainedrandom.debug
    :members:
    :undoc-members:
    :show-inheritance:

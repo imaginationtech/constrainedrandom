@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
-# Copyright (c) 2022 Imagination Technologies Ltd. All Rights Reserved
+# Copyright (c) 2023 Imagination Technologies Ltd. All Rights Reserved
 
-from random import Random
+import random
 
 from constrainedrandom import RandObj
 
@@ -16,17 +16,15 @@ class ldInstr(RandObj):
 
     And the following rules:
     - If writeback (wb) is set, src0 is written back with memory offset. In
-      this case, do not allow dst0 to be the same register as src0.
+    this case, do not allow dst0 to be the same register as src0.
     - The sum of the current contents of src0 and imm0 should be word-aligned.
     - The sum of the current contents of src0 and imm0 should not overflow 32
-      bits.
+    bits.
     '''
     ENC = 0xfa800000
 
-    def __init__(self, _random=None):
-        super().__init__(_random=_random)
-
-        self.opcode = None
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
         self.add_rand_var('src0', bits=5, order=0)
         def read_model_for_src0_value():
@@ -60,8 +58,8 @@ class ldInstr(RandObj):
 
 if __name__ == "__main__":
     # Use a seed of 0 so our results are repeatable
-    _random = Random(0)
-    ld_instr = ldInstr(_random=_random)
+    random.seed(0)
+    ld_instr = ldInstr()
     # Produce 5 random valid opcodes for this load instruction
     for _ in range(5):
         ld_instr.randomize()

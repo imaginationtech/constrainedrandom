@@ -10,7 +10,9 @@ The following example makes use of all of ``constrainedrandom``'s features to ra
 
 ..  code-block:: python
 
-    from constrainedrandom import RandObj, Random
+    import random
+
+    from constrainedrandom import RandObj
 
     class ldInstr(RandObj):
         '''
@@ -30,8 +32,8 @@ The following example makes use of all of ``constrainedrandom``'s features to ra
         '''
         ENC = 0xfa800000
 
-        def __init__(self, random, *args, **kwargs):
-            super().__init__(random, *args, **kwargs)
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
 
             self.add_rand_var('src0', bits=5, order=0)
             def read_model_for_src0_value():
@@ -45,11 +47,11 @@ The following example makes use of all of ``constrainedrandom``'s features to ra
                 if wb:
                     return dst0 != src0
                 return True
-            self.add_multi_var_constraint(wb_dst_src, ('wb', 'dst0', 'src0'))
+            self.add_constraint(wb_dst_src, ('wb', 'dst0', 'src0'))
             def sum_src0_imm0(src0_value, imm0):
                 address = src0_value + imm0
                 return (address & 3 == 0) and (address < 0xffffffff)
-            self.add_multi_var_constraint(sum_src0_imm0, ('src0_value', 'imm0'))
+            self.add_constraint(sum_src0_imm0, ('src0_value', 'imm0'))
 
         def post_randomize(self):
             self.opcode = self.get_opcode()
@@ -65,12 +67,13 @@ The following example makes use of all of ``constrainedrandom``'s features to ra
 
     if __name__ == "__main__":
         # Use a seed of 0 so our results are repeatable
-        random = Random(0)
-        ld_instr = ldInstr(random)
+        random.seed(0)
+        ld_instr = ldInstr()
         # Produce 5 random valid opcodes for this load instruction
         for _ in range(5):
             ld_instr.randomize()
             print(hex(ld_instr.opcode))
+
 
 The user is free to either inherit from ``RandObj`` (for more complex cases like this one above), or just to instance it directly and use it (for more straightforward cases like those in :doc:`howto` and in the ``tests/`` directory).
 
