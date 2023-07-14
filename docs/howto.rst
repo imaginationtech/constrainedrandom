@@ -790,19 +790,20 @@ Additional methods are provided to the user as part of ``RandObj``: ``pre_random
 
     class MyRandObj(RandObj):
 
-        def __init__(self, rand):
-            super().__init__(rand)
-
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
             self.add_rand_var('a', domain=range(10))
 
-        def pre_randomize():
-            print("hello")
+        def pre_randomize(self):
+            print("hello, value of 'a' is", self.a)
 
-        def post_randomize():
-            print("goodbye")
+        def post_randomize(self):
+            print("randomization is done, value of 'a' is", self.a)
+            self.a = self.a + 1
+            print("goodbye, value of 'a' is", self.a)
 
     random.seed(0)
-    r = RandObj()
+    r = MyRandObj()
     r.randomize()
     print(r.a)
 
@@ -810,9 +811,10 @@ Output:
 
 .. code-block::
 
-    hello
-    goodbye
-    6
+    hello, value of 'a' is None
+    randomization is done, value of 'a' is 6
+    goodbye, value of 'a' is 7
+    7
 
 The methods can be overridden to do anything the user pleases. In the ``RandObj`` class definition they are left empty.
 
