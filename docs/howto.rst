@@ -829,6 +829,39 @@ Output:
 
 The methods can be overridden to do anything the user pleases. In the ``RandObj`` class definition they are left empty.
 
+Bit slices
+----------
+
+Bit slicing is commonly required in verification activities, and is supported at a language level by HDLs like SystemVerilog. All bit slice operations can be achieved in Python by using masks, shifts and bitwise operations without any need to build it into the syntax of the language.
+
+For user convenience, ``constrainedrandom`` provides common bitwise operations in the ``constrainedrandom.bits`` package.
+
+``get_bitslice`` returns the required bitslice of the input value. E.g. the following in Python:
+
+.. code-block:: python
+
+    foo = get_bitslice(val, hi, lo)
+
+is equivalent to the following in SystemVerilog:
+
+.. code-block:: SystemVerilog
+
+    foo = val[hi:lo];
+
+``set_bitslice`` sets the bitslice of the input value with a new value and returns it. E.g. the following in Python:
+
+.. code-block:: python
+
+    val = set_bitslice(val, hi, lo, new_val)
+
+is equivalent to the following in SystemVerilog:
+
+.. code-block:: SystemVerilog
+
+    val[hi: lo] = new_val;
+
+Note that ``set_bitslice`` returns the result rather than directly modifying the input ``val``.
+
 Debugging
 ---------
 

@@ -31,7 +31,7 @@ def set_bitslice(val: int, hi: int, lo: int, new_val: int):
     a particular value. The function returns that new
     value. The input value is unaffected.
     Equivalent behaviour to SystemVerilog, i.e.
-    ``set_bitslice(val, hi, lo, new_val)`` in Python
+    ``val = set_bitslice(val, hi, lo, new_val)`` in Python
     is the same as:
     ``val[hi:lo] = new_val`` in SV.
 
