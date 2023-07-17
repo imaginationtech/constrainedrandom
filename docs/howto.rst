@@ -209,11 +209,13 @@ __________
 A "domain" denotes the possible values of the variable. A domain is one of:
  - a ``range`` of possible values
  - a ``list`` or ``tuple`` of possible values
- - a ``dict`` specifying a weighted distribution of possible values (which may itself contain a ``range`` of possible values).
+ - a ``dict`` specifying a weighted distribution of possible values (which may itself contain a ``range`` of possible values)
+ - an ``Enum`` or ``IntEnum`` class.
 
 ..  code-block:: python
 
     import random
+    from enum import Enum
 
     from constrainedrandom import RandObj
 
@@ -239,6 +241,15 @@ A "domain" denotes the possible values of the variable. A domain is one of:
             range(2,10): 25
         }
     )
+    # Add a random variable called 'my_enum', with a domain
+    # corresponding to the values of an Enum class.
+    # Values SomeEnum.SOME (0), SomeEnum.VALUES (1) and
+    # SomeEnum.HERE (10) will be chosen at random with equal weights.
+    class SomeEnum(Enum):
+        SOME = 0
+        VALUES = 1
+        HERE = 10
+    r.add_rand_var('my_enum', domain=SomeEnum)
     r.randomize()
 
 ``fn``
