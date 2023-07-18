@@ -408,7 +408,7 @@ class MultiVarProblem:
                     return solution
 
         # Try 'thorough' method - no backup plan if this fails
-        solution = self.solve_groups(groups, with_values, debug_info, debug, self.max_iterations)
+        solution = self.solve_groups(groups, with_values, self.max_iterations, debug_info, debug)
         if solution is None:
             raise utils.RandomizationError("Could not solve problem.", debug_info)
         return solution
