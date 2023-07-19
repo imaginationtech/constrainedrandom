@@ -137,6 +137,12 @@ class RandVar:
                 # Produces a list of dictionaries - index it up front for very marginal
                 # performance gains
                 solutions = problem.getSolutions()
+                if len(solutions) == 0:
+                    debug_fail = RandomizationFail([self.name],
+                        [(c, (self.name,)) for c in self.constraints])
+                    debug_info = RandomizationDebugInfo()
+                    debug_info.add_failure(debug_fail)
+                    raise utils.RandomizationError("Variable was unsolvable. Check constraints.", debug_info)
                 solution_list = [s[self.name] for s in solutions]
                 def solution_picker(solns):
                     return self._get_random().choice(solns)

@@ -54,7 +54,13 @@ class RandomizationFail:
             values are the failed values.
         '''
         self.values.append(values)
-        self.failing_constraints.append(debug_constraints(self.constraints, values))
+        # Try to work out the constraints that are failing.
+        # This may not be possible, depending on the problem we are being passed.
+        try:
+            failing_constraints = debug_constraints(self.constraints, values)
+            self.failing_constraints.append(failing_constraints)
+        except Exception:
+            self.failing_constraints.append('could not compute failing constraints')
 
     def __str__(self):
         s = f"variables: {self.variables}"

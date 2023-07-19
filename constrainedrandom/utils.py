@@ -21,10 +21,13 @@ Constraint = Callable[..., bool]
 # Constraint and the variables it applies to
 ConstraintAndVars = Tuple[Constraint, Iterable[str]]
 
-# The default maximum iterations before giving up on any randomization problem
+# The default maximum iterations before giving up on any randomization problem.
+# A larger number means convergence is more likely, but runtime may be higher.
 MAX_ITERATIONS = 100
 
-# The default largest domain size to use with the constraint library
+# The default largest domain size to use with the constraint library.
+# A large number may improve convergence, but hurt performance.
+# A lower number may improve performance, but make convergence less likely.
 CONSTRAINT_MAX_DOMAIN_SIZE = 1 << 10
 
 class RandomizationError(Exception):
