@@ -7,7 +7,7 @@ import timeit
 import unittest
 from typing import Any, Dict, List
 
-from constrainedrandom import RandObj
+from constrainedrandom import RandObj, RandomizationError
 
 
 def assertListOfDictsEqual(instance, list0, list1, msg) -> None:
@@ -27,6 +27,7 @@ class RandObjTestBase(unittest.TestCase):
 
     ITERATIONS = 1000
     TEST_LENGTH_MULTIPLIER = 1
+    EXPECT_FAILURE = False
 
     def setUp(self) -> None:
         self.iterations = self.ITERATIONS * self.TEST_LENGTH_MULTIPLIER
@@ -108,63 +109,72 @@ class RandObjTestBase(unittest.TestCase):
 
         # Test with seed 0
         randobj = self.get_randobj(0)
-        results = self.randomize_and_time(randobj, self.iterations)
-        self.check(results)
-        if do_tmp_checks:
-            # Check when applying temporary constraints
-            tmp_results = self.randomize_and_time(randobj, self.iterations, tmp_constraints, tmp_values)
-            self.tmp_check(tmp_results)
-            # Check temporary constraints don't break base randomization
-            post_tmp_results = self.randomize_and_time(randobj, self.iterations)
-            self.check(post_tmp_results)
-            # Add temporary constraints permanently, see what happens
-            if tmp_constraints is not None:
-                for constr, vars in tmp_constraints:
-                    randobj.add_constraint(constr, vars)
-                add_results = self.randomize_and_time(randobj, self.iterations, tmp_values=tmp_values)
-                self.tmp_check(add_results)
+        if self.EXPECT_FAILURE:
+            self.assertRaises(RandomizationError, randobj.randomize)
+        else:
+            results = self.randomize_and_time(randobj, self.iterations)
+            self.check(results)
+            if do_tmp_checks:
+                # Check when applying temporary constraints
+                tmp_results = self.randomize_and_time(randobj, self.iterations, tmp_constraints, tmp_values)
+                self.tmp_check(tmp_results)
+                # Check temporary constraints don't break base randomization
+                post_tmp_results = self.randomize_and_time(randobj, self.iterations)
+                self.check(post_tmp_results)
+                # Add temporary constraints permanently, see what happens
+                if tmp_constraints is not None:
+                    for constr, vars in tmp_constraints:
+                        randobj.add_constraint(constr, vars)
+                    add_results = self.randomize_and_time(randobj, self.iterations, tmp_values=tmp_values)
+                    self.tmp_check(add_results)
 
         # Test again with seed 0, ensuring results are the same
         randobj0 = self.get_randobj(0)
-        results0 = self.randomize_and_time(randobj0, self.iterations)
-        assertListOfDictsEqual(self, results, results0, "Non-determinism detected, results were not equal")
-        if do_tmp_checks:
-            # Check applying temporary constraints is also deterministic
-            tmp_results0 = self.randomize_and_time(randobj0, self.iterations, tmp_constraints, tmp_values)
-            assertListOfDictsEqual(
-                self,
-                tmp_results,
-                tmp_results0,
-                "Non-determinism detected, results were not equal with temp constraints"
-            )
-            # Check temporary constraints don't break base randomization determinism
-            post_tmp_results0 = self.randomize_and_time(randobj0, self.iterations)
-            assertListOfDictsEqual(
-                self,
-                post_tmp_results,
-                post_tmp_results0,
-                "Non-determinism detected, results were not equal after temp constraints"
-            )
-            # Add temporary constraints permanently, see what happens
-            if tmp_constraints is not None:
-                for constr, vars in tmp_constraints:
-                    randobj0.add_constraint(constr, vars)
-                add_results0 = self.randomize_and_time(randobj0, self.iterations, tmp_values=tmp_values)
+        if self.EXPECT_FAILURE:
+            self.assertRaises(RandomizationError, randobj0.randomize)
+        else:
+            results0 = self.randomize_and_time(randobj0, self.iterations)
+            assertListOfDictsEqual(self, results, results0, "Non-determinism detected, results were not equal")
+            if do_tmp_checks:
+                # Check applying temporary constraints is also deterministic
+                tmp_results0 = self.randomize_and_time(randobj0, self.iterations, tmp_constraints, tmp_values)
                 assertListOfDictsEqual(
                     self,
-                    add_results,
-                    add_results0,
-                    "Non-determinism detected, results were not equal after constraints added"
+                    tmp_results,
+                    tmp_results0,
+                    "Non-determinism detected, results were not equal with temp constraints"
                 )
+                # Check temporary constraints don't break base randomization determinism
+                post_tmp_results0 = self.randomize_and_time(randobj0, self.iterations)
+                assertListOfDictsEqual(
+                    self,
+                    post_tmp_results,
+                    post_tmp_results0,
+                    "Non-determinism detected, results were not equal after temp constraints"
+                )
+                # Add temporary constraints permanently, see what happens
+                if tmp_constraints is not None:
+                    for constr, vars in tmp_constraints:
+                        randobj0.add_constraint(constr, vars)
+                    add_results0 = self.randomize_and_time(randobj0, self.iterations, tmp_values=tmp_values)
+                    assertListOfDictsEqual(
+                        self,
+                        add_results,
+                        add_results0,
+                        "Non-determinism detected, results were not equal after constraints added"
+                    )
 
         # Test with seed 1, ensuring results are different
         randobj1 = self.get_randobj(1)
-        results1 = self.randomize_and_time(randobj1, self.iterations)
-        self.check(results1)
-        self.assertNotEqual(results, results1, "Results were the same for two different seeds, check testcase.")
-        if do_tmp_checks:
-            # Check results are also different when applying temporary constraints
-            tmp_results1 = self.randomize_and_time(randobj1, self.iterations, tmp_constraints, tmp_values)
-            self.tmp_check(tmp_results1)
-            self.assertNotEqual(tmp_results, tmp_results1,
-                                "Results were the same for two different seeds, check testcase.")
+        if self.EXPECT_FAILURE:
+            self.assertRaises(RandomizationError, randobj1.randomize)
+        else:
+            results1 = self.randomize_and_time(randobj1, self.iterations)
+            self.check(results1)
+            self.assertNotEqual(results, results1, "Results were the same for two different seeds, check testcase.")
+            if do_tmp_checks:
+                # Check results are also different when applying temporary constraints
+                tmp_results1 = self.randomize_and_time(randobj1, self.iterations, tmp_constraints, tmp_values)
+                self.tmp_check(tmp_results1)
+                self.assertNotEqual(tmp_results, tmp_results1,
+                                    "Results were the same for two different seeds, check testcase.")

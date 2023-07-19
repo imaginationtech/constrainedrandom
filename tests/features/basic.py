@@ -221,3 +221,19 @@ class Instr(testutils.RandObjTestBase):
             address = result['src0_value'] + result['imm0']
             self.assertLess(address, 0xffffffff)
             self.assertEqual(address & 3, 0)
+
+
+class ThoroughMultiSum(MultiSum):
+    '''
+    Test the thorough solver for a hard problem.
+    '''
+
+    ITERATIONS = 5
+
+    def get_randobj(self, seed):
+        randobj = super().get_randobj(seed)
+        # Set max_iterations to 1 to ensure thorough solver is used.
+        randobj._max_iterations = 1
+        # Set a smaller max domain size to speed thigns up a bit.
+        randobj._max_domain_size = 50
+        return randobj
