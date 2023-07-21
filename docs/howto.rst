@@ -773,19 +773,6 @@ Many problems will be faster to solve if the user specifies a sensible ordering 
 .. warning::
     It is possible to significantly slow down the solver speed with bad ordering hints, so only use them when you are sure the order you've specified is faster.
 
-Disabling naive solution
-------------------------
-
-The default, low-effort way to solve the problem is to randomize the variables and check the concrete values against the constraints. After a certain number of failed attempts, the solver gives up the low-effort/naive approach and constructs a proper constraint solution problem.
-
-The example given above in `Ordering hints`_ is very hard to solve by just randomizing and checking. We can force the solver to skip the step where it randomizes and checks the constraints by disabling naive constraint solution:
-
-..  code-block:: python
-
-    r.set_naive_solve(False)
-
-This means we will always construct a full constraint satisfaction problem rather than just randomizing the values and checking them against the constraints. For some problems, this will speed them up, for others it will slow them down. It is best to experiment to determine whether to do this or not.
-
 ``pre_randomize`` and ``post-randomize``
 ----------------------------------------
 
@@ -828,6 +815,76 @@ Output:
     7
 
 The methods can be overridden to do anything the user pleases. In the ``RandObj`` class definition they are left empty.
+
+Optimization
+------------
+
+This section deals with how to optimize ``constrainedrandom`` for a given problem.
+
+Constraint solving algorithms
+=============================
+
+``constrainedrandom`` employs three approaches to solving constraints, in order:
+
+1. Naive solver
+
+The default, low-effort way to solve the problem is to randomize the variables and check the concrete values against the constraints. This is called the naive solver. After a certain number of failed attempts, the solver gives up the low-effort/naive approach.
+
+2. Sparse solver
+
+A graph-based exploration of the state space. A constraint problem is constructed with variables in a given order. A random subset of possible solutions is kept at each depth of the graph in order to reduce the state space. The algorithm begins with a depth-first search, and then goes wider. It gives up after a maximum number of attempts at a maximum width.
+
+3. Thorough solver
+
+Construct a full constraint solution problem. Fully solve the CSP, finding all possible valid solutions, randomly choosing one solution. Slow, but likely to converge. There is still a restriction on the maximum domain size of the problem in order to avoid state space explosion and the program hanging. So this method might still fail.
+
+
+Setting which solvers to use
+============================
+
+Some problems may be better suited to certain solvers. The ``set_solver_mode`` function allows the user to turn each solver on or off. The order that the solvers run in as described above cannot be changed.
+
+The example given above in `Ordering hints`_ is very hard to solve by just randomizing and checking. We can force the solver to skip the step where it randomizes and checks the constraints by disabling naive constraint solution:
+
+..  code-block:: python
+
+    r.set_solver_mode(naive=False)
+
+This means we will skip the naive solver and move on immediately to the sparse solver. For some problems, this will speed them up, for others it will slow them down. It is best to experiment to determine whether to do this or not.
+
+The user can turn the other solvers on/off in the same manner. If a solver is not specified in the arguments, its state will not be changed. E.g. the below will turn the sparse solver off, the thorough solver on, and not affect the state of the naive solver:
+
+..  code-block:: python
+
+    r.set_solver_mode(sparse=False, thorough=True)
+
+Tweaking parameters
+===================
+
+``constrainedrandom`` has two main parameters that affect constraint solution, which can be set when constructing a ``RandObj``.
+
+``max_iterations`` determines how many iterations are completed before a solver gives up. It is interpreted slightly differently between the different solvers, but broadly speaking does the same thing in each.
+
+The higher the value of ``max_iterations``, the more likely it is for a solver to converge. However, if a solver has no chance to converge, this makes it take longer overall for the problem to be solved, because the solver will persist for longer before giving up.
+
+``max_domain_size`` determines the maximum state space size that will be used with the ``constraint`` library. Because ``constraint`` is a full CSP solver, it gives all possible solutions to a CSP. The state space of a CSP can easily explode. E.g. two 32 bit variables have a state space of 2^64 when considered together. The ``max_domain_size`` sets an upper limit on this, so as not to overload ``constraint``.
+
+Tweaking ``max_domain_size`` is harder than ``max_iterations``. A higher value may save time if a full constraint problem is faster than randomizing and checking, and is likely to increase the probability of convergence. However, a lower value may be much faster, to avoid computing all possibilites for easier variables.
+
+The only real way to tell is to experiment with specific problems. To alter these properties for a given ``RandObj`` instance, use the arguments in the constructor, e.g.:
+
+..  code-block:: python
+
+    randobj = RandObj(max_iterations=1000, max_domain_size=10000)
+
+Or when inheriting from ``RandObj``:
+
+..  code-block:: python
+
+    class MyRandObj(RandObj):
+
+        def __init__(self):
+            super().__init__(max_iterations=1000, max_domain_size=10000)
 
 Bit slices
 ----------
