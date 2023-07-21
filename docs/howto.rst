@@ -733,46 +733,6 @@ We can mix temporary values with temporary constraints:
     print(r.op0, r.op1)
 
 
-Ordering hints
---------------
-
-Sometimes, a randomization problem is much easier to solve if the variables are considered in a specific order.
-
-Consider this example:
-
-..  code-block:: python
-
-    import random
-
-    from constrainedrandom import RandObj
-
-
-    random.seed(0)
-    r = RandObj()
-    r.add_rand_var("x", range(100))
-    r.add_rand_var("y", range(100))
-    def plus_one(x, y):
-        return y == x + 1
-    r.add_constraint(plus_one, ("x", "y"))
-    r.randomize()
-
-In the above example, ``y`` must equal ``x + 1``. If we randomize the two variables at the same time and check the constraints, this is hard to get right randomly (a probability of 0.001).
-
-If we randomize the variables in an order, e.g. ``x`` first then ``y`` second, the problem becomes trivially easy. We can hint to the library what order might be most performant using ordering hints.
-
-The ``order`` argument to ``add_rand_var`` allows us to specify what order to attempt to solve the variables with respect to one another. It defaults to ``order=0`` if not specified.
-
-..  code-block:: python
-
-    # Solve x first, then y
-    r.add_rand_var("x", range(100), order=0)
-    r.add_rand_var("y", range(100), order=1)
-
-Many problems will be faster to solve if the user specifies a sensible ordering hint. (Obviously, the above problem is a bit silly, and in practice the user should only randomize one variable and then add one to it.)
-
-.. warning::
-    It is possible to significantly slow down the solver speed with bad ordering hints, so only use them when you are sure the order you've specified is faster.
-
 ``pre_randomize`` and ``post-randomize``
 ----------------------------------------
 
@@ -821,8 +781,49 @@ Optimization
 
 This section deals with how to optimize ``constrainedrandom`` for a given problem.
 
+Ordering hints
+______________
+
+Sometimes, a randomization problem is much easier to solve if the variables are considered in a specific order.
+
+Consider this example:
+
+..  code-block:: python
+
+    import random
+
+    from constrainedrandom import RandObj
+
+
+    random.seed(0)
+    r = RandObj()
+    r.add_rand_var("x", range(100))
+    r.add_rand_var("y", range(100))
+    def plus_one(x, y):
+        return y == x + 1
+    r.add_constraint(plus_one, ("x", "y"))
+    r.randomize()
+
+In the above example, ``y`` must equal ``x + 1``. If we randomize the two variables at the same time and check the constraints, this is hard to get right randomly (a probability of 0.001).
+
+If we randomize the variables in an order, e.g. ``x`` first then ``y`` second, the problem becomes trivially easy. We can hint to the library what order might be most performant using ordering hints.
+
+The ``order`` argument to ``add_rand_var`` allows us to specify what order to attempt to solve the variables with respect to one another. It defaults to ``order=0`` if not specified.
+
+..  code-block:: python
+
+    # Solve x first, then y
+    r.add_rand_var("x", range(100), order=0)
+    r.add_rand_var("y", range(100), order=1)
+
+Many problems will be faster to solve if the user specifies a sensible ordering hint. (Obviously, the above problem is a bit silly, and in practice the user should only randomize one variable and then add one to it.)
+
+.. warning::
+    It is possible to significantly slow down the solver speed with bad ordering hints, so only use them when you are sure the order you've specified is faster.
+
+
 Constraint solving algorithms
-=============================
+_____________________________
 
 ``constrainedrandom`` employs three approaches to solving constraints, in order:
 
@@ -840,7 +841,7 @@ Construct a full constraint solution problem. Fully solve the CSP, finding all p
 
 
 Setting which solvers to use
-============================
+____________________________
 
 Some problems may be better suited to certain solvers. The ``set_solver_mode`` function allows the user to turn each solver on or off. The order that the solvers run in as described above cannot be changed.
 
@@ -859,7 +860,7 @@ The user can turn the other solvers on/off in the same manner. If a solver is no
     r.set_solver_mode(sparse=False, thorough=True)
 
 Tweaking parameters
-===================
+___________________
 
 ``constrainedrandom`` has two main parameters that affect constraint solution, which can be set when constructing a ``RandObj``.
 

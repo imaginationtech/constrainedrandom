@@ -93,14 +93,14 @@ class RandObj:
 
         Solvers are used in the following order:
         1. Naive solve - randomizing and checking constraints.
-            For some problems, it is more expedient to skip this
-            step and go straight to a MultiVarProblem.
+        For some problems, it is more expedient to skip this
+        step and go straight to a MultiVarProblem.
         2. Sparse solve - graph-based exporation of state space.
-            Start with depth-first search, move to wider subsets
-            of each level of state space until valid solution
-            found.
+        Start with depth-first search, move to wider subsets
+        of each level of state space until valid solution
+        found.
         3. Thorough solve - use constraint solver to get
-            all solutions and pick a random one.
+        all solutions and pick a random one.
 
         If a solver step is enabled it will run, if disabled
         it won't run.
