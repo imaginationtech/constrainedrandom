@@ -176,6 +176,9 @@ class MultiVarProblem:
                 if attempts >= max_iterations:
                     # We have failed, give up
                     return None
+                if attempts > 0 and not group_problem.can_retry():
+                    # Not worth retrying - the same result will be obtained.
+                    return None
                 if sparse_solver:
                     if len(solutions) > 0:
                         # Respect a proportion of the solution space, determined
@@ -222,6 +225,8 @@ class MultiVarProblem:
 
     def solve(
         self,
+        sparse: bool,
+        thorough: bool,
         with_values: Optional[Dict[str, Any]]=None,
         debug: bool=False,
     ) -> Union[Dict[str, Any], None]:
@@ -239,35 +244,42 @@ class MultiVarProblem:
         '''
         with_values = {} if with_values is None else with_values
         groups = self.determine_order(with_values)
-
         solution = None
-
-        # Try to solve sparsely first
-        sparsities = [1, 10, 100, 1000]
-        # The worst-case value of the number of iterations for one sparsity level is:
-        # iterations_per_sparsity * iterations_per_attempt
-        # because of the call to solve_groups hitting iterations_per_attempt.
-        # Failing individual solution attempts speeds up some problems greatly,
-        # this can be thought of as pruning explorations of the state tree.
-        # So, reduce iterations_per_attempt by an order of magnitude.
-        iterations_per_sparsity = self.max_iterations
-        iterations_per_attempt = self.max_iterations // 10
         # Create debug info in case of failure
         self.debug_info = RandomizationDebugInfo()
         self.debug = debug
-        for sparsity in sparsities:
-            for _ in range(iterations_per_sparsity):
-                solution = self.solve_groups(
-                    groups,
-                    with_values,
-                    iterations_per_attempt,
-                    sparsity,
-                )
-                if solution is not None and len(solution) > 0:
-                    return solution
 
-        # Try 'thorough' method - no backup plan if this fails
-        solution = self.solve_groups(groups, with_values, self.max_iterations)
+        # Try to solve sparsely first
+        if sparse:
+            sparsities = [1, 10, 100, 1000]
+            # The worst-case value of the number of iterations for one sparsity level is:
+            # iterations_per_sparsity * iterations_per_attempt
+            # because of the call to solve_groups hitting iterations_per_attempt.
+            # Failing individual solution attempts speeds up some problems greatly,
+            # this can be thought of as pruning explorations of the state tree.
+            # So, reduce iterations_per_attempt by an order of magnitude.
+            iterations_per_sparsity = self.max_iterations
+            # Ensure it's non-zero
+            iterations_per_attempt = (self.max_iterations // 10) + 1
+            for sparsity in sparsities:
+                for _ in range(iterations_per_sparsity):
+                    solution = self.solve_groups(
+                        groups=groups,
+                        with_values=with_values,
+                        max_iterations=iterations_per_attempt,
+                        solutions_per_group=sparsity,
+                    )
+                    if solution is not None and len(solution) > 0:
+                        return solution
+
+        if thorough:
+            # Try 'thorough' method - no backup plan if this fails
+            solution = self.solve_groups(
+                groups=groups,
+                with_values=with_values,
+                max_iterations=self.max_iterations,
+                solutions_per_group=None,
+            )
         if solution is None:
             raise utils.RandomizationError("Could not solve problem.", self.debug_info)
         return solution

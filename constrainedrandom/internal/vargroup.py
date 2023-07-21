@@ -96,6 +96,17 @@ class VarGroup:
             failing_constraints += [(constr, (var.name,)) for constr in var.constraints]
         return RandomizationFail(list(self.group_vars), failing_constraints)
 
+    def can_retry(self):
+        '''
+        Call this to determine whether or not retrying ``solve``
+        can have a different outcome.
+
+        :return: ``True`` if calling ``solve`` again might yield
+            a different result (assuming it has already been called.)
+            ``False`` otherwise.
+        '''
+        return len(self.rand_vars) > 0
+
     def solve(
         self,
         max_iterations: int,
@@ -139,17 +150,19 @@ class VarGroup:
                     break
                 else:
                     attempts += 1
+                    # Always output debug info on the last attempt.
+                    failed = attempts >= max_iterations
+                    debug = self.debug or (solutions_per_group is None and failed)
                     for var in self.rand_vars:
                         # Remove from problem, they will be re-added with different concrete values
                         del self.problem._variables[var.name]
-                    if self.debug:
-                        # Add all randomization failures to failure for debugging
-                        self.debug_fail.add_values(dict(self.problem._variables))
-                    if attempts >= max_iterations:
+                    if debug:
+                        self.debug_fail.add_values(attempts, dict(self.problem._variables))
+                    if failed:
                         # We have failed, give up
-                        self.debug_fail.add_values(dict(self.problem._variables))
                         debug_info.add_failure(self.debug_fail)
                         return None
+
         else:
             # Otherwise, just get the solutions, no randomization required.
             solutions = self.problem.getSolutions()

@@ -66,6 +66,8 @@ class RandObj:
         self._max_iterations = max_iterations
         self._max_domain_size = max_domain_size
         self._naive_solve = True
+        self._sparse_solve = True
+        self._thorough_solve = True
         self._problem_changed = False
 
     def _get_random(self) -> random.Random:
@@ -81,16 +83,45 @@ class RandObj:
             return random
         return self._random
 
-    def set_naive_solve(self, naive: bool) -> None:
+    def set_solver_mode(self,
+        naive: Optional[bool]=None,
+        sparse: Optional[bool]=None,
+        thorough: Optional[bool]=None,
+    ) -> None:
         '''
-        Disable/enable naive solving step, i.e. randomizing and checking constraints.
-        For some problems, it is more expedient to skip this step and go straight to
-        a MultiVarProblem.
+        Disable/enable different solving steps.
 
-        :param naive: ``True`` if naive solve should be used, ``False`` otherwise.
+        Solvers are used in the following order:
+        1. Naive solve - randomizing and checking constraints.
+            For some problems, it is more expedient to skip this
+            step and go straight to a MultiVarProblem.
+        2. Sparse solve - graph-based exporation of state space.
+            Start with depth-first search, move to wider subsets
+            of each level of state space until valid solution
+            found.
+        3. Thorough solve - use constraint solver to get
+            all solutions and pick a random one.
+
+        If a solver step is enabled it will run, if disabled
+        it won't run.
+
+        :param naive: ``True`` if naive solver should be used,
+            ``False`` otherwise. Setting not changed if argument
+            not provided.
+        :param sparse: ``True`` if sparse solver should be used,
+            ``False`` otherwise. Setting not changed if argument
+            not provided.
+        :param thorough: ``True`` if thorough solver should be used,
+            ``False`` otherwise. Setting not changed if argument
+            not provided.
         :return: ``None``
         '''
-        self._naive_solve = naive
+        if naive is not None:
+            self._naive_solve = naive
+        if sparse is not None:
+            self._sparse_solve = sparse
+        if thorough is not None:
+            self._thorough_solve = thorough
 
     def add_rand_var(
         self,
@@ -255,7 +286,8 @@ class RandObj:
             containing the variables it applies to.
         :param debug: ``True`` to run in debug mode. Slower, but collects
             all debug info along the way and not just the final failure.
-        :raises RandomizationError: If no solution is found within defined limits.
+        :raises RandomizationError: If no solution is found
+            that satisfies the defined constraints.
         '''
         self.pre_randomize()
 
@@ -339,6 +371,11 @@ class RandObj:
         # If constraints are still not satisfied by this point, construct a multi-variable
         # problem and solve them properly
         if not constraints_satisfied:
+            if not (self._sparse_solve or self._thorough_solve):
+                raise utils.RandomizationError(
+                    'Naive solve failed, and sparse solve and thorough solve disabled.' \
+                    ' There is no way to solve the problem.'
+                )
             if problem_changed or self._problem_changed or self._multi_var_problem is None:
                 multi_var_problem = MultiVarProblem(
                     self,
@@ -353,7 +390,14 @@ class RandObj:
                     self._problem_changed = False
             else:
                 multi_var_problem = self._multi_var_problem
-            result.update(multi_var_problem.solve(with_values, debug))
+            result.update(
+                multi_var_problem.solve(
+                    sparse=self._sparse_solve,
+                    thorough=self._thorough_solve,
+                    with_values=with_values,
+                    debug=debug,
+                )
+            )
 
         # Update this object such that the results of randomization are available as member variables
         self.__dict__.update(result)

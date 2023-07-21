@@ -267,7 +267,7 @@ class RandVar:
                     # Just capture the most recent value
                     debug_fail = RandomizationFail([self.name],
                         [(c, (self.name,)) for c in constraints])
-                debug_fail.add_values({self.name: value})
+                debug_fail.add_values(iterations, {self.name: value})
                 debug_info = RandomizationDebugInfo()
                 debug_info.add_failure(debug_fail)
                 raise utils.RandomizationError("Too many iterations, can't solve problem", debug_fail)
@@ -279,7 +279,7 @@ class RandVar:
             if not value_valid:
                 if debug:
                     # Capture all failing values as we go
-                    debug_fail.add_values({self.name: value})
+                    debug_fail.add_values(iterations, {self.name: value})
                 value = self.randomizer()
             iterations += 1
         return value
@@ -356,7 +356,7 @@ class RandVar:
                                 # set of values.
                                 debug_fail = RandomizationFail([self.name],
                                     [(c, (self.name,)) for c in list_constraints])
-                            debug_fail.add_values({self.name: values + [new_value]})
+                            debug_fail.add_values(iterations, {self.name: values + [new_value]})
                             debug_info = RandomizationDebugInfo()
                             debug_info.add_failure(debug_fail)
                             raise utils.RandomizationError("Too many iterations, can't solve problem", debug_info)
@@ -368,7 +368,7 @@ class RandVar:
                         if not values_valid:
                             if debug:
                                 # Capture all failing values as we go
-                                debug_fail.add_values({self.name: values + [new_value]})
+                                debug_fail.add_values(iterations, {self.name: values + [new_value]})
                             new_value = self.randomize_once(constraints, check_constraints, debug)
                             iterations += 1
                     values.append(new_value)

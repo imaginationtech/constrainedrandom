@@ -58,6 +58,30 @@ class BasicFeatures(testutils.RandObjTestBase):
             self.assertIn(result['int_enum'], (1, 2))
 
 
+class BasicSparse(BasicFeatures):
+    '''
+    Test basic features, only with sparse constraint solver.
+    '''
+
+    def get_randobj(self, seed):
+        randobj = super().get_randobj(seed)
+        randobj.set_solver_mode(naive=False, sparse=True, thorough=False)
+        return randobj
+
+
+class BasicThorough(BasicFeatures):
+    '''
+    Test basic features, only with thorough constraint solver.
+    '''
+
+    ITERATIONS = 1000
+
+    def get_randobj(self, seed):
+        randobj = super().get_randobj(seed)
+        randobj.set_solver_mode(naive=False, sparse=False, thorough=True)
+        return randobj
+
+
 class MultiBasic(testutils.RandObjTestBase):
     '''
     Test a basic multi-variable constraint (easy to randomly fulfill the constraint).
@@ -91,7 +115,7 @@ class MultiPlusOne(testutils.RandObjTestBase):
     def get_randobj(self, seed):
         r = RandObj(Random(seed))
         # Very unlikely (1/100) to solve the problem naively, just skip to applying constraints.
-        r.set_naive_solve(False)
+        r.set_solver_mode(naive=False)
         r.add_rand_var("x", domain=range(100), order=0)
         r.add_rand_var("y", domain=range(100), order=1)
         def plus_one(x, y):
@@ -118,7 +142,7 @@ class MultiSum(testutils.RandObjTestBase):
         '''
         r = RandObj(Random(seed))
         # Very unlikely (1/200^3) to solve the problem naively, just skip to applying constraints.
-        r.set_naive_solve(False)
+        r.set_solver_mode(naive=False)
         def nonzero(x):
             return x != 0
         r.add_rand_var("x", domain=range(-100, 100), order=0, constraints=(nonzero,))

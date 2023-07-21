@@ -45,15 +45,16 @@ class RandomizationFail:
         self.values = []
         self.failing_constraints = []
 
-    def add_values(self, values: Dict[str, Any]) -> None:
+    def add_values(self, attempt: int, values: Dict[str, Any]) -> None:
         '''
         Adds values to the failed randomization. These values did
         not satisfy one or more constraints.
 
+        :param attempt: Number of attempts up until this failure.
         :param values: Dictionary where keys are names of variables,
             values are the failed values.
         '''
-        self.values.append(values)
+        self.values.append((attempt, values))
         # Try to work out the constraints that are failing.
         # This may not be possible, depending on the problem we are being passed.
         try:
@@ -67,8 +68,8 @@ class RandomizationFail:
         s += f"\nconstraints: {self.constraints}"
         if len(self.values) > 0:
             s += f"\nvalues and failing constraints:"
-        for value_dict, failing_constraints in zip(self.values, self.failing_constraints):
-            s += f"\n  values: {value_dict}"
+        for (attempt, value_dict), failing_constraints in zip(self.values, self.failing_constraints):
+            s += f"\n  attempt: {attempt}  values: {value_dict}"
             s += f" failing constraints: {failing_constraints}"
         return s
 
