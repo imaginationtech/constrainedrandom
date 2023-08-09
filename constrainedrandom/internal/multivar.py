@@ -196,14 +196,17 @@ class MultiVarProblem:
                                     del problem._variables[var_name]
                                 problem.addVariable(var_name, (value,))
                         else:
-                            solution_space = defaultdict(set)
+                            solution_space = defaultdict(list)
                             for soln in solution_subset:
                                 for var_name, value in soln.items():
-                                    solution_space[var_name].add(value)
+                                    # List is ~2x slower than set for 'in',
+                                    # but variables might be non-hashable.
+                                    if value not in solution_space[var_name]:
+                                        solution_space[var_name].append(value)
                             for var_name, values in solution_space.items():
                                 if var_name in problem._variables:
                                     del problem._variables[var_name]
-                                problem.addVariable(var_name, list(values))
+                                problem.addVariable(var_name, values)
 
                 # Attempt to solve the group
                 group_solutions = group_problem.solve(

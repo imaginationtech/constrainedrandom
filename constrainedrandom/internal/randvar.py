@@ -88,6 +88,8 @@ class RandVar:
         # List constraints are always checked.
         self.check_constraints = len(self.constraints) > 0
         self.randomizer = self.create_randomizer()
+        self.list_naive_failures = 0
+        self.max_list_naive_failures = 10
 
     def create_randomizer(self) -> Callable:
         '''
@@ -238,7 +240,9 @@ class RandVar:
         else:
             # List of greater length, cartesian product.
             # Beware that this may be an extremely large domain.
-            return product(self.domain, repeat=self.length)
+            # Ensure each element is of type list, which is what
+            # we want to return.
+            return [list(x) for x in product(self.domain, repeat=self.length)]
 
     def randomize_once(self, constraints: Iterable[utils.Constraint], check_constraints: bool, debug: bool) -> Any:
         '''
@@ -284,10 +288,174 @@ class RandVar:
             iterations += 1
         return value
 
+    def randomize_list_csp(
+        self,
+        constraints: Iterable[utils.Constraint],
+        list_constraints: Iterable[utils.Constraint],
+    ):
+        '''
+        Use a CSP to get a full set of soltuons for the random list,
+        fulfilling the constraints. Selects and returns one randomization.
+        Should only be used when the domain is suitably small.
+
+        :param constraints: The constraints that apply to this randomization.
+            These are scalar constraints, i.e. on each individual element of
+            the list.
+        :param list_constraints: The constraints that apply to the entire list.
+        :return: A random list of values for the variable, respecting
+            the constraints.
+        '''
+        problem = constraint.Problem()
+        possible_values = self.get_constraint_domain()
+        # Prune possibilities according to scalar constraints.
+        possible_values[:] = [x for x in possible_values \
+            if all(constr(val) for val in x for constr in constraints)]
+        problem.addVariable(self.name, possible_values)
+        for con in list_constraints:
+            problem.addConstraint(con, (self.name,))
+        solutions = problem.getSolutions()
+        if len(solutions) == 0:
+            debug_fail = RandomizationFail([self.name],
+                [(con, (self.name,)) for con in list_constraints])
+            debug_info = RandomizationDebugInfo()
+            debug_info.add_failure(debug_fail)
+            raise utils.RandomizationError("Problem was unsolvable.", debug_info)
+        values = self._get_random().choice(solutions)[self.name]
+        return values
+
+    def randomize_list_naive(
+        self,
+        constraints: Iterable[utils.Constraint],
+        check_constraints: bool,
+        list_constraints: Iterable[utils.Constraint],
+        debug : bool,
+        debug_fail: Optional[RandomizationFail],
+    ):
+        '''
+        Naive algorithm to randomize a random list of values, and check
+        it against the constraints. Faster than CSP as long as it's a simple
+        problem. Prone to failure.
+
+        :param constraints: The constraints that apply to this randomization.
+            These are scalar constraints, i.e. on each individual element of
+            the list.
+        :param check_constraints: Whether constraints need to be checked.
+        :param list_constraints: The constraints that apply to the entire list.
+        :param debug: ``True`` to run in debug mode. Slower, but collects
+            all debug info along the way and not just the final failure.
+        :param debug_fail: :class:`RandomizationFail` containing debug info,
+            if in debug mode, else ``None``.
+        :return: A random list of values for the variable, respecting
+            the constraints.
+        '''
+        values = [self.randomize_once(constraints, check_constraints, debug) \
+            for _ in range(self.length)]
+        values_valid = len(list_constraints) == 0
+        iterations = 0
+        max_iterations = self.max_iterations
+        while not values_valid:
+            if iterations >= max_iterations:
+                # This method has failed.
+                return None
+            problem = constraint.Problem()
+            problem.addVariable(self.name, (values,))
+            for con in list_constraints:
+                problem.addConstraint(con, (self.name,))
+            values_valid = problem.getSolution() is not None
+            if not values_valid:
+                if debug:
+                    # Capture all failing values as we go
+                    debug_fail.add_values(iterations, {self.name: values})
+                iterations += 1
+                values = [self.randomize_once(constraints, check_constraints, debug) \
+                    for _ in range(self.length)]
+        return values
+
+    def randomize_list_subset(
+        self,
+        constraints: Iterable[utils.Constraint],
+        check_constraints: bool,
+        list_constraints: Iterable[utils.Constraint],
+        debug : bool,
+        debug_fail: Optional[RandomizationFail],
+    ):
+        '''
+        Algorithm that attempts to ensure forward progress when randomizing
+        a random list. Over-constrains the problem slightly. Aims to converage
+        quickly while still giving good quality of results.
+
+        :param constraints: The constraints that apply to this randomization.
+            These are scalar constraints, i.e. on each individual element of
+            the list.
+        :param check_constraints: Whether constraints need to be checked.
+        :param list_constraints: The constraints that apply to the entire list.
+        :param debug: ``True`` to run in debug mode. Slower, but collects
+            all debug info along the way and not just the final failure.
+        :param debug_fail: :class:`RandomizationFail` containing debug info,
+            if in debug mode, else ``None``.
+        :return: A random list of values for the variable, respecting
+            the constraints.
+        :raises RandomizationError: When the problem cannot be solved in fewer than
+            the allowed number of iterations.
+        '''
+        values = [self.randomize_once(constraints, check_constraints, debug) \
+            for _ in range(self.length)]
+        values_valid = len(list_constraints) == 0
+        iterations = 0
+        # Allow more attempts at a list, as it may be computationally hard.
+        # Assume it's linearly harder.
+        max_iterations = self.max_iterations * self.length
+        checked = []
+        while not values_valid:
+            iterations += 1
+            if iterations >= max_iterations:
+                if not debug:
+                    # Create the debug info 'late', only capturing the final
+                    # set of values.
+                    debug_fail = RandomizationFail([self.name],
+                        [(c, (self.name,)) for c in list_constraints])
+                debug_fail.add_values(iterations, {self.name: values})
+                debug_info = RandomizationDebugInfo()
+                debug_info.add_failure(debug_fail)
+                raise utils.RandomizationError("Too many iterations, can't solve problem", debug_info)
+            # Keep a subset of the answer, to try to ensure forward progress.
+            min_group_size = len(checked) + 1
+            for idx in range(min_group_size, self.length):
+                tmp_values = values[:idx]
+                problem = constraint.Problem()
+                problem.addVariable(self.name, (tmp_values,))
+                for con in list_constraints:
+                    problem.addConstraint(con, (self.name,))
+                # This may fail if the user is relying on the
+                # list being fully-sized in their constraint.
+                try:
+                    tmp_values_valid = problem.getSolution() is not None
+                except Exception:
+                    tmp_values_valid = False
+                if tmp_values_valid:
+                    # Use these values and continue this loop,
+                    # adding to the checked values if more
+                    # values satisfy the constraints.
+                    # Check the entire list to ensure maximum
+                    # degrees of freedom.
+                    checked = tmp_values
+            values = checked + [self.randomize_once(constraints, check_constraints, debug) \
+                for _ in range(self.length - len(checked))]
+            problem = constraint.Problem()
+            problem.addVariable(self.name, (values,))
+            for con in list_constraints:
+                problem.addConstraint(con, (self.name,))
+            values_valid = problem.getSolution() is not None
+            if debug and not values_valid:
+                # Capture failure info as we go along
+                debug_fail.add_values(iterations, {self.name: values})
+        return values
+
     def randomize(
         self,
         temp_constraints: Optional[Iterable[utils.Constraint]]=None,
-        debug: bool=False) -> Any:
+        debug: bool=False
+    ) -> Any:
         '''
         Returns a random value based on the definition of this random variable.
         Does not modify the state of the :class:`RandVar` instance.
@@ -303,73 +471,53 @@ class RandVar:
         # Handle temporary constraints. Start with copy of existing constraints,
         # adding any temporary ones in.
         constraints = list(self.constraints)
+        using_temp_constraints = temp_constraints is not None and len(temp_constraints) > 0
         if self.length == 0:
             # Interpret temporary constraints as scalar constraints
-            if temp_constraints is not None and len(temp_constraints) > 0:
+            if using_temp_constraints:
                 check_constraints = True
                 constraints += temp_constraints
             return self.randomize_once(constraints, check_constraints, debug)
         else:
             list_constraints = list(self.list_constraints)
             # Interpret temporary constraints as list constraints
-            if temp_constraints is not None and len(temp_constraints) > 0:
+            if using_temp_constraints:
                 list_constraints += temp_constraints
-            values = []
-            # Create list of values, checking as we go that list constraints
+            # Create list of values and check after that list constraints
             # are followed.
+            # We can't check as we go along as this artificially limits
+            # the values that can be selected. E.g. if you have a constraint
+            # that says the values sum to zero, you would only ever
+            # end up with an all-zero list if you enforced the constraint
+            # at each iteration.
             # Try to construct a constraint solution problem, if possible.
             check_list_constraints = len(list_constraints) > 0
             use_csp = check_list_constraints and self.can_use_with_constraint() \
-                    and len(self.domain) < self.max_domain_size
-            for _ in range(self.length):
-                if use_csp:
-                    problem = constraint.Problem()
-                    possible_values = []
-                    for x in self.domain:
-                        new_values = list(values)
-                        new_values.append(x)
-                        possible_values.append(new_values)
-                    problem.addVariable(self.name, possible_values)
-                    for con in list_constraints:
-                        problem.addConstraint(con, (self.name,))
-                    solutions = problem.getSolutions()
-                    if len(solutions) == 0:
-                        debug_fail = RandomizationFail([self.name],
-                            [(con, (self.name,)) for con in list_constraints])
-                        debug_info = RandomizationDebugInfo()
-                        debug_info.add_failure(debug_fail)
-                        raise utils.RandomizationError("Problem was unsolvable.", debug_info)
-                    values = self._get_random().choice(solutions)[self.name]
+                    and self.get_domain_size() <= self.max_domain_size
+            if use_csp:
+                return self.randomize_list_csp(constraints, list_constraints)
+            else:
+                # Otherwise, just randomize and check.
+                if debug:
+                    # Collect failures as we go along
+                    debug_fail = RandomizationFail([self.name],
+                        [(c, (self.name,)) for c in list_constraints])
                 else:
-                    # Otherwise, just randomize and check.
-                    new_value = self.randomize_once(constraints, check_constraints, debug)
-                    values_valid = not check_list_constraints
-                    iterations = 0
-                    if debug:
-                        # Collect failures as we go along
-                        debug_fail = RandomizationFail([self.name],
-                            [(c, (self.name,)) for c in list_constraints])
-                    while not values_valid:
-                        if iterations == self.max_iterations:
-                            if not debug:
-                                # Create the debug info 'late', only capturing the final
-                                # set of values.
-                                debug_fail = RandomizationFail([self.name],
-                                    [(c, (self.name,)) for c in list_constraints])
-                            debug_fail.add_values(iterations, {self.name: values + [new_value]})
-                            debug_info = RandomizationDebugInfo()
-                            debug_info.add_failure(debug_fail)
-                            raise utils.RandomizationError("Too many iterations, can't solve problem", debug_info)
-                        problem = constraint.Problem()
-                        problem.addVariable(self.name, (values + [new_value],))
-                        for con in list_constraints:
-                            problem.addConstraint(con, (self.name,))
-                        values_valid = problem.getSolution() is not None
-                        if not values_valid:
-                            if debug:
-                                # Capture all failing values as we go
-                                debug_fail.add_values(iterations, {self.name: values + [new_value]})
-                            new_value = self.randomize_once(constraints, check_constraints, debug)
-                            iterations += 1
-                    values.append(new_value)
-            return values
+                    debug_fail = None
+                # Start by purely randomizing and checking.
+                # Optimize this by disabling naive solution after it
+                # fails a certain number of times.
+                if self.list_naive_failures < self.max_list_naive_failures:
+                    values = self.randomize_list_naive(constraints, \
+                        check_constraints, list_constraints, debug, debug_fail)
+                    if values is not None:
+                        return values
+                # Only count it as a failure if running without temp constraints.
+                if not using_temp_constraints:
+                    self.list_naive_failures += 1
+                # If the above fails, use a slightly smarter algorithm,
+                # which is more likely to make forward progress, but
+                # might also restrict value selection.
+                # No fallback if this fails.
+                return self.randomize_list_subset(constraints, \
+                    check_constraints, list_constraints, debug, debug_fail)

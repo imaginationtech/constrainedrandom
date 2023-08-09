@@ -141,10 +141,14 @@ class VarGroup:
                         self.problem.addVariable(var.name, (var.randomize(),))
                     else:
                         iterations = self.max_domain_size if solutions_per_group is None else solutions_per_group
-                        var_domain = set()
+                        var_domain = []
                         for _ in range(iterations):
-                            var_domain.add(var.randomize())
-                        self.problem.addVariable(var.name, sorted(var_domain))
+                            val = var.randomize()
+                            # List is ~2x slower than set for 'in',
+                            # but variables might be non-hashable.
+                            if val not in var_domain:
+                                var_domain.append(val)
+                        self.problem.addVariable(var.name, var_domain)
                 solutions = self.problem.getSolutions()
                 if len(solutions) > 0:
                     break

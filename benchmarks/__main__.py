@@ -15,6 +15,8 @@ from random import Random
 from benchmarks.pyvsc.basic import vsc_basic, cr_basic
 from benchmarks.pyvsc.in_keyword import vsc_in, cr_in, cr_in_order
 from benchmarks.pyvsc.ldinstr import vsc_ldinstr
+from benchmarks.pyvsc.randlist import vscRandListSumZero, \
+    crRandListSumZero, vscRandListUnique, crRandListUnique
 from examples.ldinstr import ldInstr
 
 
@@ -108,6 +110,38 @@ class BenchmarkTests(unittest.TestCase):
         def check(results):
             self.assertGreater(results['cr'][1], results['vsc'][1])
             # This testcase is typically 13-15x faster, which may vary depending
+            # on machine. Ensure it doesn't fall below 10x.
+            speedup = results['cr'][1] / results['vsc'][1]
+            self.assertGreater(speedup, 10, "Performance has degraded!")
+        self.run_benchmark(randobjs, 100, check)
+
+    def test_randlist_sumzero(self):
+        '''
+        Test random list example where the list must sum to zero.
+        '''
+        randobjs = {
+            'vsc': vscRandListSumZero(),
+            'cr': crRandListSumZero(Random(0)),
+        }
+        def check(results):
+            self.assertGreater(results['cr'][1], results['vsc'][1])
+            # This testcase is typically 20x faster, which may vary depending
+            # on machine. Ensure it doesn't fall below 15x.
+            speedup = results['cr'][1] / results['vsc'][1]
+            self.assertGreater(speedup, 15, "Performance has degraded!")
+        self.run_benchmark(randobjs, 100, check)
+
+    def test_randlist_unique(self):
+        '''
+        Test random list example where the list must be unique.
+        '''
+        randobjs = {
+            'vsc': vscRandListUnique(),
+            'cr': crRandListUnique(Random(0)),
+        }
+        def check(results):
+            self.assertGreater(results['cr'][1], results['vsc'][1])
+            # This testcase is typically 10-13x faster, which may vary depending
             # on machine. Ensure it doesn't fall below 10x.
             speedup = results['cr'][1] / results['vsc'][1]
             self.assertGreater(speedup, 10, "Performance has degraded!")
