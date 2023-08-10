@@ -25,6 +25,12 @@ $ make html
 
 The index page is at `docs/_build/html/index.html` - you can open this in a web browser.
 
+## Releases/versioning
+
+Releases are created using tags from the repository and can be found on [PyPI](https://pypi.org/project/constrainedrandom/).
+
+Versioning attempts to follow [Semantic Versioning](https://semver.org/).
+
 ## Contributions
 
 Please feel free to contribute to the project, following these guidelines:
