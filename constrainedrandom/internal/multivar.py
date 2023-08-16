@@ -37,7 +37,7 @@ class MultiVarProblem:
     def __init__(
         self,
         parent: 'RandObj',
-        vars: Dict[str, 'RandVar'],
+        vars: List['RandVar'],
         constraints: Iterable[utils.ConstraintAndVars],
         max_iterations: int,
         max_domain_size: int,
@@ -71,15 +71,14 @@ class MultiVarProblem:
         # to solve at the same time.
         # The best case is to simply solve them all at once, if possible, however it is
         # likely that the domain will be too large.
-        vars = []
-
         # If values are provided, simply don't add those variables to the ordering problem.
         if problem_changed:
-            for name, var in self.vars.items():
-                if name not in with_values:
+            vars = []
+            for var in self.vars:
+                if var.name not in with_values:
                     vars.append(var)
         else:
-            vars = list(self.vars.values())
+            vars = list(self.vars)
 
         # Use order hints first, remaining variables can be placed anywhere the domain
         # isn't too large.

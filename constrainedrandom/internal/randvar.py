@@ -4,12 +4,35 @@
 import constraint
 from functools import partial
 from itertools import product
-from typing import Any, Callable, Iterable, Optional, Union
+from typing import Any, Callable, Iterable, List, Optional
 import random
 
 from .. import utils
 from ..debug import RandomizationDebugInfo, RandomizationFail
 from ..random import dist
+
+
+def get_and_call(getter: Callable, member_fn: str, *args: List[Any]):
+    '''
+    This is a very strange workaround for a very strange issue.
+    ``copy.deepcopy`` can handle a ``partial`` for all other members
+    of ``random.Random``, but not ``getrandbits``. I.e. it correctly
+    copies the other functions and their instance of ``random.Random``,
+    but not ``getrandbits``. The reason for this is unknown.
+
+    This function therefore exists to work around that issue
+    by getting ``getrandbits`` and calling it. I tried many
+    other approaches, but this was the only one that worked.
+
+    :param getter: Getter to call, returning an object that
+        has a member function with name ``member_fn``.
+    :param member_fn: Member function of the the object returned
+        by ``getter``.
+    :param args: Arguments to supply to ``member_fn``.
+    '''
+    callable_obj = getter()
+    fn = getattr(callable_obj, member_fn)
+    return fn(*args)
 
 
 class RandVar:
@@ -99,6 +122,10 @@ class RandVar:
         We do this to create a more optimal randomizer than the user might
         have specified that is functionally equivalent.
 
+        We always return a ``partial`` because these work with
+        ``copy.deepcopy``, whereas locally-defined functions and
+        lambdas can only ever have one instance.
+
         :return: a function as described.
         :raises TypeError: if the domain is of a bad type.
         '''
@@ -111,7 +138,9 @@ class RandVar:
                 return self.fn
         elif self.bits is not None:
             self.domain = range(0, 1 << self.bits)
-            return partial(self._get_random().getrandbits, self.bits)
+            # This is still faster than doing self._get_random().randrange(self.bits << 1),
+            # it seems that getrandbits is 10x faster than randrange.
+            return partial(get_and_call, self._get_random, 'getrandbits', self.bits)
         else:
             # Handle possible types of domain.
             is_range = isinstance(self.domain, range)
@@ -146,10 +175,8 @@ class RandVar:
                     debug_info.add_failure(debug_fail)
                     raise utils.RandomizationError("Variable was unsolvable. Check constraints.", debug_info)
                 solution_list = [s[self.name] for s in solutions]
-                def solution_picker(solns):
-                    return self._get_random().choice(solns)
                 self.check_constraints = False
-                return partial(solution_picker, solution_list)
+                return partial(self._get_random().choice, solution_list)
             elif is_range:
                 return partial(self._get_random().randrange, self.domain.start, self.domain.stop)
             elif is_list_or_tuple:
@@ -308,7 +335,7 @@ class RandVar:
         problem = constraint.Problem()
         possible_values = self.get_constraint_domain()
         # Prune possibilities according to scalar constraints.
-        possible_values[:] = [x for x in possible_values \
+        possible_values = [x for x in possible_values \
             if all(constr(val) for val in x for constr in constraints)]
         problem.addVariable(self.name, possible_values)
         for con in list_constraints:

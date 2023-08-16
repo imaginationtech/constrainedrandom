@@ -318,18 +318,20 @@ class RandObj:
                     problem_changed = True
             # If a variable becomes constrained due to temporary multi-variable
             # constraints, we must respect single var temporary constraints too.
-            for var, constrs in tmp_single_var_constraints.items():
+            for var, constrs in sorted(tmp_single_var_constraints.items()):
                 if var in constrained_vars:
                     for constr in constrs:
                         constraints.append((constr, (var,)))
 
         # Don't allow non-determinism when iterating over a set
         constrained_vars = sorted(constrained_vars)
+        # Don't allow non-determinism when iterating over a dict
+        random_vars = sorted(self._random_vars.items())
 
         # Process concrete values - use these preferentially
         with_values = with_values if with_values is not None else {}
 
-        for name, random_var in self._random_vars.items():
+        for name, random_var in random_vars:
             if name in with_values:
                 result[name] = with_values[name]
             else:
@@ -379,7 +381,7 @@ class RandObj:
             if problem_changed or self._problem_changed or self._multi_var_problem is None:
                 multi_var_problem = MultiVarProblem(
                     self,
-                    {name: var for name, var in self._random_vars.items() if name in constrained_vars},
+                    [var for var_name, var in random_vars if var_name in constrained_vars],
                     constraints,
                     max_iterations=self._max_iterations,
                     max_domain_size=self._max_domain_size,
