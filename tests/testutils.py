@@ -233,6 +233,8 @@ class RandObjTestBase(unittest.TestCase):
         # Test using global seeding, ensuring results are the same
         random.seed(0)
         randobj0_global = self.get_randobj()
+        # Take a copy for later
+        randobj0_global_copy = deepcopy(randobj0_global)
         self.randomize_and_check_result(
             randobj0_global,
             results,
@@ -250,6 +252,21 @@ class RandObjTestBase(unittest.TestCase):
         random.seed(0)
         self.randomize_and_check_result(
             randobj0_global,
+            results,
+            do_tmp_checks,
+            tmp_constraints,
+            tmp_values,
+            tmp_results,
+            post_tmp_results,
+            add_results,
+            add_tmp_constraints=False,
+        )
+
+        # Test the copied globally-seeded object
+        # Must re-seed the global random package to ensure repeatability
+        random.seed(0)
+        self.randomize_and_check_result(
+            randobj0_global_copy,
             results,
             do_tmp_checks,
             tmp_constraints,
