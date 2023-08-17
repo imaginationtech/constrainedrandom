@@ -34,8 +34,8 @@ class RandList(testutils.RandObjTestBase):
     ITERATIONS = 1000
     LENGTH = 10
 
-    def get_randobj(self, seed):
-        r = RandObj(Random(seed))
+    def get_randobj(self, *args):
+        r = RandObj(*args)
         def not_7(x):
             return x != 7
         r.add_rand_var('listvar', domain=range(10), constraints=[not_7], length=self.LENGTH)
@@ -63,8 +63,8 @@ class RandListConstrained(testutils.RandObjTestBase):
     ITERATIONS = 1000
     LENGTH = 2
 
-    def get_randobj(self, seed):
-        r = RandObj(Random(seed))
+    def get_randobj(self, *args):
+        r = RandObj(*args)
         def not_7(x):
             return x != 7
         r.add_rand_var('listvar', domain=range(10), constraints=[not_7], length=self.LENGTH)
@@ -106,8 +106,8 @@ class RandListConstrainedVeryHard(testutils.RandObjTestBase):
     ITERATIONS = 10
     LENGTH = 10
 
-    def get_randobj(self, seed):
-        r = RandObj(Random(seed))
+    def get_randobj(self, *args):
+        r = RandObj(*args)
         r.add_rand_var('listvar', domain=range(10), length=self.LENGTH, list_constraints=(plus_or_minus_one,))
         return r
 
@@ -132,8 +132,8 @@ class RandListMultivar(testutils.RandObjTestBase):
     ITERATIONS = 10
     LENGTH = 10
 
-    def get_randobj(self, seed):
-        r = RandObj(Random(seed))
+    def get_randobj(self, *args):
+        r = RandObj(*args)
         r.add_rand_var('listvar', domain=range(10), length=self.LENGTH, list_constraints=(plus_or_minus_one,))
         # Give x slightly larger range so it is sometimes impossible
         r.add_rand_var('x', domain=range(11), order=1)
@@ -163,9 +163,15 @@ class RandListUnique(testutils.RandObjTestBase):
     ITERATIONS = 100
     LENGTH = 10
 
-    def get_randobj(self, seed):
-        r = RandObj(Random(seed))
-        r.add_rand_var('listvar', domain=range(10), length=self.LENGTH, list_constraints=(unique,))
+    def get_randobj(self, *args):
+        r = RandObj(*args)
+        r.add_rand_var(
+            'listvar',
+            domain=range(10),
+            length=self.LENGTH,
+            list_constraints=(unique,),
+            disable_naive_list_solver=True,
+        )
         return r
 
     def check(self, results):
@@ -187,8 +193,8 @@ class RandListTempConstraints(testutils.RandObjTestBase):
     ITERATIONS = 100
     LENGTH = 10
 
-    def get_randobj(self, seed):
-        r = RandObj(Random(seed))
+    def get_randobj(self, *args):
+        r = RandObj(*args)
         def not_4(x):
             return x != 4
         def not_too_many_zeros(listvar):
@@ -229,8 +235,8 @@ class RandListSumZero(testutils.RandObjTestBase):
 
     ITERATIONS = 100
 
-    def get_randobj(self, seed):
-        randobj = RandObj(Random(seed))
+    def get_randobj(self, *args):
+        randobj = RandObj(*args)
         randobj.add_rand_var('listvar', length=10, domain=range(-10, 11))
         randobj.add_constraint(sum_0, ('listvar',))
         return randobj
@@ -258,8 +264,8 @@ class RandListSparse(testutils.RandObjTestBase):
 
     ITERATIONS = 1
 
-    def get_randobj(self, seed):
-        randobj = RandObj(Random(seed))
+    def get_randobj(self, *args):
+        randobj = RandObj(*args)
         randobj.set_solver_mode(naive=False, sparse=True, thorough=False)
         randobj.add_rand_var('listvar1', length=10, domain=range(-10, 11))
         randobj.add_constraint(sum_0, ('listvar1',))

@@ -19,8 +19,8 @@ class TempConstraint(testutils.RandObjTestBase):
 
     ITERATIONS = 1000
 
-    def get_randobj(self, seed):
-        r = RandObj(Random(seed))
+    def get_randobj(self, *args):
+        r = RandObj(*args)
         r.add_rand_var('a', domain=range(10))
         return r
 
@@ -49,8 +49,8 @@ class TempMultiConstraint(testutils.RandObjTestBase):
 
     ITERATIONS = 1000
 
-    def get_randobj(self, seed):
-        r = RandObj(Random(seed))
+    def get_randobj(self, *args):
+        r = RandObj(*args)
         r.add_rand_var('a', domain=range(10))
         r.add_rand_var('b', domain=range(100))
         return r
@@ -85,8 +85,8 @@ class MixedTempConstraints(testutils.RandObjTestBase):
 
     ITERATIONS = 1000
 
-    def get_randobj(self, seed):
-        r = RandObj(Random(seed))
+    def get_randobj(self, *args):
+        r = RandObj(*args)
         r.add_rand_var('a', domain=range(10))
         r.add_rand_var('b', domain=range(100))
         return r
@@ -178,8 +178,8 @@ class WithValues(testutils.RandObjTestBase):
 
     ITERATIONS = 1000
 
-    def get_randobj(self, seed):
-        r = RandObj(Random(seed))
+    def get_randobj(self, *args):
+        r = RandObj(*args)
         r.add_rand_var('a', domain=range(10))
         r.add_rand_var('b', domain=range(100))
         return r
@@ -210,8 +210,8 @@ class WithValuesWithConstraints(testutils.RandObjTestBase):
 
     ITERATIONS = 1000
 
-    def get_randobj(self, seed):
-        r = RandObj(Random(seed))
+    def get_randobj(self, *args):
+        r = RandObj(*args)
         r.add_rand_var('a', domain=range(10))
         r.add_rand_var('b', domain=range(100))
         return r

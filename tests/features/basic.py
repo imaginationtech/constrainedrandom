@@ -28,8 +28,8 @@ class BasicFeatures(testutils.RandObjTestBase):
         ONE = 1
         TWO = 2
 
-    def get_randobj(self, seed):
-        r = RandObj(Random(seed))
+    def get_randobj(self, *args):
+        r = RandObj(*args)
         r.add_rand_var("foo", domain=range(100))
         r.add_rand_var("bar", domain=(1,2,3,))
         r.add_rand_var("baz", bits=4)
@@ -63,8 +63,8 @@ class BasicSparse(BasicFeatures):
     Test basic features, only with sparse constraint solver.
     '''
 
-    def get_randobj(self, seed):
-        randobj = super().get_randobj(seed)
+    def get_randobj(self, *args):
+        randobj = super().get_randobj(*args)
         randobj.set_solver_mode(naive=False, sparse=True, thorough=False)
         return randobj
 
@@ -76,8 +76,8 @@ class BasicThorough(BasicFeatures):
 
     ITERATIONS = 1000
 
-    def get_randobj(self, seed):
-        randobj = super().get_randobj(seed)
+    def get_randobj(self, *args):
+        randobj = super().get_randobj(*args)
         randobj.set_solver_mode(naive=False, sparse=False, thorough=True)
         return randobj
 
@@ -89,8 +89,8 @@ class MultiBasic(testutils.RandObjTestBase):
 
     ITERATIONS = 100
 
-    def get_randobj(self, seed):
-        r = RandObj(Random(seed))
+    def get_randobj(self, *args):
+        r = RandObj(*args)
         r.add_rand_var("a", domain=range(10))
         r.add_rand_var("b", domain=range(10))
         r.add_rand_var("c", domain=range(5,10))
@@ -112,8 +112,8 @@ class MultiPlusOne(testutils.RandObjTestBase):
 
     ITERATIONS = 100
 
-    def get_randobj(self, seed):
-        r = RandObj(Random(seed))
+    def get_randobj(self, *args):
+        r = RandObj(*args)
         # Very unlikely (1/100) to solve the problem naively, just skip to applying constraints.
         r.set_solver_mode(naive=False)
         r.add_rand_var("x", domain=range(100), order=0)
@@ -135,12 +135,12 @@ class MultiSum(testutils.RandObjTestBase):
 
     ITERATIONS = 100
 
-    def get_randobj(self, seed):
+    def get_randobj(self, *args):
         '''
         Very difficult problem to solve naively, to force the solver
         into using MultiVarProblem. Used by several tests.
         '''
-        r = RandObj(Random(seed))
+        r = RandObj(*args)
         # Very unlikely (1/200^3) to solve the problem naively, just skip to applying constraints.
         r.set_solver_mode(naive=False)
         def nonzero(x):
@@ -166,8 +166,8 @@ class MultiOrder(testutils.RandObjTestBase):
 
     ITERATIONS = 100
 
-    def get_randobj(self, seed):
-        r = RandObj(Random(seed))
+    def get_randobj(self, *args):
+        r = RandObj(*args)
         r.add_rand_var("a", domain=range(100), order=0)
         r.add_rand_var("b", domain=range(100), order=1)
         def mul_lt1000(a, b):
@@ -192,8 +192,8 @@ class Dist(testutils.RandObjTestBase):
 
     ITERATIONS = 10000
 
-    def get_randobj(self, seed):
-        r = RandObj(Random(seed))
+    def get_randobj(self, *args):
+        r = RandObj(*args)
         r.add_rand_var("dist", domain={0: 25, 1 : 25, range(2,5): 50})
         return r
 
@@ -234,8 +234,8 @@ class Instr(testutils.RandObjTestBase):
 
     ITERATIONS = 1000
 
-    def get_randobj(self, seed):
-        ld_instr = ldInstr(Random(seed))
+    def get_randobj(self, *args):
+        ld_instr = ldInstr(*args)
         return ld_instr
 
     def check(self, results):
@@ -254,8 +254,8 @@ class ThoroughMultiSum(MultiSum):
 
     ITERATIONS = 5
 
-    def get_randobj(self, seed):
-        randobj = super().get_randobj(seed)
+    def get_randobj(self, *args):
+        randobj = super().get_randobj(*args)
         # Set max_iterations to 1 to ensure thorough solver is used.
         randobj._max_iterations = 1
         # Set a smaller max domain size to speed thigns up a bit.

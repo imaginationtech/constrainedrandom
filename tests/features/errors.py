@@ -25,8 +25,8 @@ class ImpossibleThorough(MultiSum):
 
     EXPECT_FAILURE = True
 
-    def get_randobj(self, seed):
-        randobj = super().get_randobj(seed)
+    def get_randobj(self, *args):
+        randobj = super().get_randobj(*args)
         # Only use thorough solver.
         randobj.set_solver_mode(naive=False, sparse=False)
         # Make problem impossible so that numbers can't sum to 41.
@@ -45,8 +45,8 @@ class ImpossibleOneVar(testutils.RandObjTestBase):
     Test an impossible constraint problem with one variable.
     '''
 
-    def get_randobj(self, seed):
-        randobj = RandObj(Random(seed))
+    def get_randobj(self, *args):
+        randobj = RandObj(*args)
         def eq_zero(x):
             return x == 0
         randobj.add_rand_var('a', domain=[1,], constraints=[eq_zero,])
@@ -68,8 +68,8 @@ class ImpossibleComplexVar(testutils.RandObjTestBase):
 
     EXPECT_FAILURE = True
 
-    def get_randobj(self, seed):
-        randobj = RandObj(Random(seed))
+    def get_randobj(self, *args):
+        randobj = RandObj(*args)
         def eq_minus_one(x):
             return x == -1
         randobj.add_rand_var('a', bits=64, constraints=[eq_minus_one,])
@@ -83,8 +83,8 @@ class ImpossibleMultiVar(testutils.RandObjTestBase):
 
     EXPECT_FAILURE = True
 
-    def get_randobj(self, seed):
-        randobj = RandObj(Random(seed))
+    def get_randobj(self, *args):
+        randobj = RandObj(*args)
         def lt_5(x):
             return x < 5
         randobj.add_rand_var('a', domain=range(10), constraints=[lt_5,])
