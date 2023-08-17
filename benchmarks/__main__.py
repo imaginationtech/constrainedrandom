@@ -16,7 +16,8 @@ from benchmarks.pyvsc.basic import vsc_basic, cr_basic
 from benchmarks.pyvsc.in_keyword import vsc_in, cr_in, cr_in_order
 from benchmarks.pyvsc.ldinstr import vsc_ldinstr
 from benchmarks.pyvsc.randlist import vscRandListSumZero, \
-    crRandListSumZero, vscRandListUnique, crRandListUnique
+    crRandListSumZero, vscRandListUnique, crRandListUnique, \
+    crRandListSumZeroFaster, crRandListUniqueFaster
 from examples.ldinstr import ldInstr
 
 
@@ -122,12 +123,16 @@ class BenchmarkTests(unittest.TestCase):
         randobjs = {
             'vsc': vscRandListSumZero(),
             'cr': crRandListSumZero(Random(0)),
+            'cr_faster': crRandListSumZeroFaster(Random(0)),
         }
         def check(results):
             self.assertGreater(results['cr'][1], results['vsc'][1])
+            self.assertGreater(results['cr_faster'][1], results['vsc'][1])
             # This testcase is typically 20x faster, which may vary depending
             # on machine. Ensure it doesn't fall below 15x.
             speedup = results['cr'][1] / results['vsc'][1]
+            self.assertGreater(speedup, 15, "Performance has degraded!")
+            speedup = results['cr_faster'][1] / results['vsc'][1]
             self.assertGreater(speedup, 15, "Performance has degraded!")
         self.run_benchmark(randobjs, 100, check)
 
@@ -138,12 +143,19 @@ class BenchmarkTests(unittest.TestCase):
         randobjs = {
             'vsc': vscRandListUnique(),
             'cr': crRandListUnique(Random(0)),
+            'cr_faster': crRandListUniqueFaster(Random(0)),
         }
         def check(results):
+            self.assertGreater(results['cr_faster'][1], results['vsc'][1])
             self.assertGreater(results['cr'][1], results['vsc'][1])
+            # With the naive solver, this testcase is typically 3-4x faster,
+            # which may vary depending on machine. Ensure it doesn't fall
+            # below 2x.
+            speedup = results['cr'][1] / results['vsc'][1]
+            self.assertGreater(speedup, 2, "Performance has degraded!")
             # This testcase is typically 10-13x faster, which may vary depending
             # on machine. Ensure it doesn't fall below 10x.
-            speedup = results['cr'][1] / results['vsc'][1]
+            speedup = results['cr_faster'][1] / results['vsc'][1]
             self.assertGreater(speedup, 10, "Performance has degraded!")
         self.run_benchmark(randobjs, 100, check)
 
