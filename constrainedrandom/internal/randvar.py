@@ -67,6 +67,8 @@ class RandVar:
     :param max_domain_size: The maximum size of domain that a constraint satisfaction problem
         may take. This is used to avoid poor performance. When a problem exceeds this domain
         size, we don't use the ``constraint`` package, but just use ``random`` instead.
+    :param disable_naive_list_solver: Attempt to use a faster algorithm for solving
+        list problems. May be faster, but may negatively impact quality of results.
     '''
 
     def __init__(self,
@@ -83,6 +85,7 @@ class RandVar:
         length: int,
         max_iterations: int,
         max_domain_size: int,
+        disable_naive_list_solver: bool,
     ) -> None:
         self._random = _random
         self.name = name
@@ -111,8 +114,7 @@ class RandVar:
         # List constraints are always checked.
         self.check_constraints = len(self.constraints) > 0
         self.randomizer = self.create_randomizer()
-        self.list_naive_failures = 0
-        self.max_list_naive_failures = 10
+        self.disable_naive_list_solver = disable_naive_list_solver
 
     def create_randomizer(self) -> Callable:
         '''
@@ -182,7 +184,12 @@ class RandVar:
             elif is_list_or_tuple:
                 return partial(self._get_random().choice, self.domain)
             elif is_dict:
-                return partial(dist, self.domain, self._get_random())
+                rand = self._get_random()
+                if rand is random:
+                    # Don't store a module in a partial as this can't be copied.
+                    # dist defaults to using the global random module.
+                    return partial(dist, self.domain)
+                return partial(dist, self.domain, rand)
             else:
                 raise TypeError(f'RandVar was passed a domain of a bad type - {self.domain}. '
                                 'Domain should be a range, list, tuple, dictionary or other Iterable.')
@@ -531,17 +538,13 @@ class RandVar:
                         [(c, (self.name,)) for c in list_constraints])
                 else:
                     debug_fail = None
-                # Start by purely randomizing and checking.
-                # Optimize this by disabling naive solution after it
-                # fails a certain number of times.
-                if self.list_naive_failures < self.max_list_naive_failures:
+                # Start by purely randomizing and checking, unless
+                # naive mode disabled.
+                if not self.disable_naive_list_solver:
                     values = self.randomize_list_naive(constraints, \
                         check_constraints, list_constraints, debug, debug_fail)
                     if values is not None:
                         return values
-                # Only count it as a failure if running without temp constraints.
-                if not using_temp_constraints:
-                    self.list_naive_failures += 1
                 # If the above fails, use a slightly smarter algorithm,
                 # which is more likely to make forward progress, but
                 # might also restrict value selection.

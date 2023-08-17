@@ -136,6 +136,7 @@ class RandObj:
         length: int=0,
         order: int=0,
         initial: Any=None,
+        disable_naive_list_solver: bool=False,
     ) -> None:
         '''
         Add a random variable to the object.
@@ -163,6 +164,8 @@ class RandObj:
             values. A value of 0 means a scalar value. A value >= 1 means a list of that length.
         :param order: The solution order for this variable with respect to other variables.
         :param initial: Initial value to assign to the variable prior to randomizing.
+        :param disable_naive_list_solver: Attempt to use a faster algorithm for solving
+            list problems. May be faster, but may negatively impact quality of results.
         :return: ``None``
         :raises AssertionError: If inputs are not valid.
 
@@ -209,6 +212,7 @@ class RandObj:
             length=length,
             max_iterations=self._max_iterations,
             max_domain_size=self._max_domain_size,
+            disable_naive_list_solver=disable_naive_list_solver,
         )
         self._problem_changed = True
         self.__dict__[name] = initial
