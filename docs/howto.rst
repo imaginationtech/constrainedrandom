@@ -167,6 +167,59 @@ The ``RandObj`` class accepts an instance of the ``random.Random`` class in its 
     # Using a different seed produces different results.
     my_function(1, "third call:")
 
+Copying and repeatability
+_________________________
+
+``RandObj`` supports Python's ``copy.deepcopy``. However, there is a caveat that users should be aware of.
+
+A ``RandObj`` that is seeded with the object-based approach above is guaranteed to be repeatable from the point where it is copied.
+
+E.g. the following code will run fine with no assertion error:
+
+..  code-block:: python
+
+    import copy
+    import random
+
+    from constrainedrandom import RandObj
+
+    randobj = RandObj(random.Random(0))
+    randobj.add_rand_var('x', domain=range(100))
+    randobj_copy = copy.deepcopy(randobj)
+    randobj.randomize()
+    randobj_copy.randomize()
+    # The results of both will be the same.
+    assert randobj.get_results() == randobj_copy.get_results(), "this should be true!"
+
+However, a ``RandObj``  that is globally seeded is not suitable to be deep copied. A strange interaction between ``deepcopy`` and ``functools.partial`` that depend on the globally-scoped ``random`` module means that state is unintentionally shared between the original ``RandObj`` and its copy.
+
+E.g. the following code will *NOT* give reproducible results between the original object and its copy.
+
+.. code-block:: python
+
+    import copy
+    import random
+
+    from constrainedrandom import RandObj
+
+    random.seed(0)
+    randobj = RandObj()
+    randobj.add_rand_var('x', domain=range(100))
+    # Take a copy
+    randobj_copy = copy.deepcopy(randobj)
+    randobj.randomize()
+    # re-seed global random to try to make it reproducible
+    random.seed(0)
+    randobj_copy.randomize()
+    # The following will fail for many RandObj instances:
+    assert randobj.get_results() == randobj_copy.get_results(), "this will fail!"
+
+There is another issue where constraints added to the original may affect the copy, and vice versa. This is obviously not a good thing.
+
+Therefore, **the user is recommended not to use ``copy.deepcopy`` with globally-seeded instances of ``RandObj``**.
+
+To fix this issue, ``RandObj`` would need to implement its own ``__deepcopy__`` method. This can be done as and when this behaviour is required by users and the workaround of using object-based seeding is not acceptable.
+
 Adding random variables
 -----------------------
 
