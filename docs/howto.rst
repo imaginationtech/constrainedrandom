@@ -216,7 +216,7 @@ E.g. the following code will *NOT* give reproducible results between the origina
 
 There is another issue where constraints added to the original may affect the copy, and vice versa. This is obviously not a good thing.
 
-Therefore, **the user is recommended not to use ``copy.deepcopy`` with globally-seeded instances of ``RandObj``**.
+Therefore, **the user is recommended not to use** ``copy.deepcopy`` **with globally-seeded instances of** ``RandObj``.
 
 To fix this issue, ``RandObj`` would need to implement its own ``__deepcopy__`` method. This can be done as and when this behaviour is required by users and the workaround of using object-based seeding is not acceptable.
 
