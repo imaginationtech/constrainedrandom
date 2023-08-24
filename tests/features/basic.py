@@ -6,7 +6,6 @@ Test basic features.
 '''
 
 from enum import Enum, IntEnum
-from random import Random
 
 from constrainedrandom import RandObj
 from examples.ldinstr import ldInstr
@@ -80,6 +79,35 @@ class BasicThorough(BasicFeatures):
         randobj = super().get_randobj(*args)
         randobj.set_solver_mode(naive=False, sparse=False, thorough=True)
         return randobj
+
+
+class BitsLargeWidth(testutils.RandObjTestBase):
+    '''
+    Test that large values of bits work.
+    '''
+
+    ITERATIONS = 1000
+
+    def get_randobj(self, *args):
+        r = RandObj(*args)
+        def not_1(x):
+            return x != 1
+        r.add_rand_var('uint64_t', bits=64, constraints=[not_1])
+        r.add_rand_var('uint128_t', bits=128, constraints=[not_1])
+        r.add_rand_var('uint256_t', bits=256, constraints=[not_1])
+        return r
+
+    def check(self, results):
+        for result in results:
+            self.assertGreaterEqual(result['uint64_t'], 0)
+            self.assertLess(result['uint64_t'], 1 << 64)
+            self.assertNotEqual(result['uint64_t'], 1)
+            self.assertGreaterEqual(result['uint128_t'], 0)
+            self.assertLess(result['uint128_t'], 1 << 128)
+            self.assertNotEqual(result['uint128_t'], 1)
+            self.assertGreaterEqual(result['uint256_t'], 0)
+            self.assertLess(result['uint256_t'], 1 << 256)
+            self.assertNotEqual(result['uint256_t'], 1)
 
 
 class MultiBasic(testutils.RandObjTestBase):

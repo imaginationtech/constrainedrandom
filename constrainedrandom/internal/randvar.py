@@ -138,61 +138,80 @@ class RandVar:
                 return partial(self.fn, *self.args)
             else:
                 return self.fn
-        elif self.bits is not None:
+        if self.bits is not None:
+            # Convert this to a range-based domain.
             self.domain = range(0, 1 << self.bits)
-            # This is still faster than doing self._get_random().randrange(self.bits << 1),
-            # it seems that getrandbits is 10x faster than randrange.
+            # If sufficiently small, let this fall through to the general case,
+            # to optimize randomization w.r.t. constraints.
+            # The maximum size of range that Python can handle (in CPython)
+            # when using size_tis 62 bits, as it uses signed 64-bit integers
+            # and the top of the range is expressed as 1 << bits, i.e.
+            # requiring one extra bit to store.
+            if self.bits >= 63:
+                # Ideally here we would use:
+                # return partial(self._get_random().getrandbits, self.bits)
+                # as it seems that getrandbits is 10x faster than randrange.
+                # However, there is a very strange interaction between deepcopy
+                # and random that prevents this. See get_and_call for details.
+                # This solution is still faster than a partial with randrange.
+                return partial(get_and_call, self._get_random, 'getrandbits', self.bits)
+        # Handle possible types of domain.
+        is_range = isinstance(self.domain, range)
+        is_list_or_tuple = isinstance(self.domain, list) or isinstance(self.domain, tuple)
+        is_dict = isinstance(self.domain, dict)
+        # Range, list and tuple are handled nicely by the constraint package.
+        # Other Iterables may not be, e.g. enum.Enum isn't, despite being an Iterable.
+        is_iterable = isinstance(self.domain, Iterable)
+        if is_iterable and not (is_range or is_list_or_tuple or is_dict):
+            # Convert non-dict iterables to a tuple as we don't expect them to need to be mutable,
+            # and tuple ought to be slightly more performant than list.
+            try:
+                self.domain = tuple(self.domain)
+            except TypeError:
+                raise TypeError(f'RandVar was passed a domain of bad type - {self.domain}. '
+                                'This was an Iterable but could not be converted to tuple.')
+            is_list_or_tuple = True
+        if self.check_constraints and (is_range or is_list_or_tuple) and len(self.domain) < self.max_domain_size:
+            # If we are provided a sufficiently small domain and we have constraints, simply construct a
+            # constraint solution problem instead.
+            problem = constraint.Problem()
+            problem.addVariable(self.name, self.domain)
+            for con in self.constraints:
+                problem.addConstraint(con, (self.name,))
+            # Produces a list of dictionaries - index it up front for very marginal
+            # performance gains
+            solutions = problem.getSolutions()
+            if len(solutions) == 0:
+                debug_fail = RandomizationFail([self.name],
+                    [(c, (self.name,)) for c in self.constraints])
+                debug_info = RandomizationDebugInfo()
+                debug_info.add_failure(debug_fail)
+                raise utils.RandomizationError("Variable was unsolvable. Check constraints.", debug_info)
+            solution_list = [s[self.name] for s in solutions]
+            self.check_constraints = False
+            return partial(self._get_random().choice, solution_list)
+        elif self.bits is not None:
+            # Ideally here we would use:
+            # return partial(self._get_random().getrandbits, self.bits)
+            # as it seems that getrandbits is 10x faster than randrange.
+            # However, there is a very strange interaction between deepcopy
+            # and random that prevents this. See get_and_call for details.
+            # This solution is still faster than a partial with randrange.
             return partial(get_and_call, self._get_random, 'getrandbits', self.bits)
+        elif is_range:
+            return partial(self._get_random().randrange, self.domain.start, self.domain.stop)
+        elif is_list_or_tuple:
+            return partial(self._get_random().choice, self.domain)
+        elif is_dict:
+            rand = self._get_random()
+            if rand is random:
+                # Don't store a module in a partial as this can't be copied.
+                # dist defaults to using the global random module.
+                return partial(dist, self.domain)
+            return partial(dist, self.domain, rand)
         else:
-            # Handle possible types of domain.
-            is_range = isinstance(self.domain, range)
-            is_list_or_tuple = isinstance(self.domain, list) or isinstance(self.domain, tuple)
-            is_dict = isinstance(self.domain, dict)
-            # Range, list and tuple are handled nicely by the constraint package.
-            # Other Iterables may not be, e.g. enum.Enum isn't, despite being an Iterable.
-            is_iterable = isinstance(self.domain, Iterable)
-            if is_iterable and not (is_range or is_list_or_tuple or is_dict):
-                # Convert non-dict iterables to a tuple as we don't expect them to need to be mutable,
-                # and tuple ought to be slightly more performant than list.
-                try:
-                    self.domain = tuple(self.domain)
-                except TypeError:
-                    raise TypeError(f'RandVar was passed a domain of bad type - {self.domain}. '
-                                    'This was an Iterable but could not be converted to tuple.')
-                is_list_or_tuple = True
-            if self.check_constraints and (is_range or is_list_or_tuple) and len(self.domain) < self.max_domain_size:
-                # If we are provided a sufficiently small domain and we have constraints, simply construct a
-                # constraint solution problem instead.
-                problem = constraint.Problem()
-                problem.addVariable(self.name, self.domain)
-                for con in self.constraints:
-                    problem.addConstraint(con, (self.name,))
-                # Produces a list of dictionaries - index it up front for very marginal
-                # performance gains
-                solutions = problem.getSolutions()
-                if len(solutions) == 0:
-                    debug_fail = RandomizationFail([self.name],
-                        [(c, (self.name,)) for c in self.constraints])
-                    debug_info = RandomizationDebugInfo()
-                    debug_info.add_failure(debug_fail)
-                    raise utils.RandomizationError("Variable was unsolvable. Check constraints.", debug_info)
-                solution_list = [s[self.name] for s in solutions]
-                self.check_constraints = False
-                return partial(self._get_random().choice, solution_list)
-            elif is_range:
-                return partial(self._get_random().randrange, self.domain.start, self.domain.stop)
-            elif is_list_or_tuple:
-                return partial(self._get_random().choice, self.domain)
-            elif is_dict:
-                rand = self._get_random()
-                if rand is random:
-                    # Don't store a module in a partial as this can't be copied.
-                    # dist defaults to using the global random module.
-                    return partial(dist, self.domain)
-                return partial(dist, self.domain, rand)
-            else:
-                raise TypeError(f'RandVar was passed a domain of a bad type - {self.domain}. '
-                                'Domain should be a range, list, tuple, dictionary or other Iterable.')
+            raise TypeError(f'RandVar was passed a domain of a bad type - {self.domain}. '
+                            'Domain should be a range, list, tuple, dictionary or other Iterable.')
 
     def add_constraint(self, constr: utils.Constraint) -> None:
         '''
