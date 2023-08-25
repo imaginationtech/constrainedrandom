@@ -61,7 +61,7 @@ class RandObj:
         # Prefix 'internal use' variables with '_', as randomized results are populated to the class
         self._random = _random
         self._random_vars = {}
-        self._rand_lengths = defaultdict(list)
+        self._rand_list_lengths = defaultdict(list)
         self._constraints : List[utils.ConstraintAndVars] = []
         self._constrained_vars = set()
         self._max_iterations = max_iterations
@@ -136,7 +136,7 @@ class RandObj:
         list_constraints: Optional[Iterable[utils.Constraint]]=None,
         length: Optional[int]=None,
         rand_length: Optional[str]=None,
-        order: int=0,
+        order: Optional[int]=None,
         initial: Any=None,
         disable_naive_list_solver: bool=False,
     ) -> None:
@@ -216,12 +216,13 @@ class RandObj:
             assert self._random_vars[rand_length].length is None, f"random length '{name}' must be a scalar random" \
                 " variable, but is itself a random list."
             # Track that this variable depends on another for its length.
-            self._rand_lengths[rand_length].append(name)
+            self._rand_list_lengths[rand_length].append(name)
             # Ensure the order used for this variable is greater than
             # the one we depend on.
             # Ignore the user if they're wrong rather than raising an error.
-            if order < self._random_vars[rand_length].order:
+            if order is None or order <= self._random_vars[rand_length].order:
                 order = self._random_vars[rand_length].order + 1
+        order = 0 if order is None else order
         self._random_vars[name] = RandVar(
             name=name,
             _random=self._random,
@@ -284,11 +285,17 @@ class RandObj:
                 self._random_vars[variables[0]].add_constraint(constr)
             else:
                 # Multi-variable constraint
+                self._constraints.append((constr, variables))
                 for var in variables:
                     assert var in self._random_vars, \
                         f"Variable {var} was not in the set of random variables!"
                     self._constrained_vars.add(var)
-                self._constraints.append((constr, variables))
+                    # If var constrains other variables' lengths,
+                    # those other variables must also be considered
+                    # as constrained.
+                    if var in self._rand_list_lengths:
+                        for list_var in self._rand_list_lengths[var]:
+                            self._constrained_vars.add(list_var)
         else:
             raise TypeError(f"{variables=} must be of type str, tuple or list")
         self._problem_changed = True
@@ -359,32 +366,32 @@ class RandObj:
         # Don't allow non-determinism when iterating over a set
         constrained_vars = sorted(constrained_vars)
         # Don't allow non-determinism when iterating over a dict
-        random_vars = sorted(self._random_vars.items())
-        list_length_vars = sorted(self._rand_lengths.items())
+        random_var_names = sorted(self._random_vars.keys())
+        list_length_names = sorted(self._rand_list_lengths.keys())
 
         # Process concrete values - use these preferentially
         with_values = with_values if with_values is not None else {}
 
         # Randomize list length vars first
-        for name, dependent_var_list in list_length_vars:
-            if name in with_values:
-                length_result = with_values[name]
+        for list_length_name in list_length_names:
+            if list_length_name in with_values:
+                length_result = with_values[list_length_name]
             else:
-                tmp_constraints = tmp_single_var_constraints.get(name, [])
-                length_result = self._random_vars[name].randomize(tmp_constraints, debug)
-            result[name] = length_result
-            for dependent_var_name in dependent_var_list:
+                tmp_constraints = tmp_single_var_constraints.get(list_length_name, [])
+                length_result = self._random_vars[list_length_name].randomize(tmp_constraints, debug)
+            result[list_length_name] = length_result
+            for dependent_var_name in self._rand_list_lengths[list_length_name]:
                 self._random_vars[dependent_var_name].set_rand_length(length_result)
 
         # Randomize all remaining variables once
-        for name, random_var in random_vars:
-            if name in self._rand_lengths:
+        for name in random_var_names:
+            if name in self._rand_list_lengths:
                 continue
             if name in with_values:
                 result[name] = with_values[name]
             else:
                 tmp_constraints = tmp_single_var_constraints.get(name, [])
-                result[name] = random_var.randomize(tmp_constraints, debug)
+                result[name] = self._random_vars[name].randomize(tmp_constraints, debug)
 
         # If there are constraints, first try just to solve naively by randomizing the values.
         # This will be faster than constructing a MultiVarProblem if the constraints turn out
@@ -410,16 +417,16 @@ class RandObj:
                 else:
                     # No solution found, re-randomize and try again
                     # List length variables first
-                    for name, dependent_var_list in list_length_vars:
+                    for list_length_name in list_length_names:
                         # If the length-defining variable is constrained,
                         # re-randomize it and all its dependent vars.
-                        if name not in with_values and name in constrained_vars:
-                            tmp_constraints = tmp_single_var_constraints.get(name, [])
-                            length_result = self._random_vars[name].randomize(tmp_constraints, debug)
-                            result[name] = length_result
+                        if list_length_name not in with_values and list_length_name in constrained_vars:
+                            tmp_constraints = tmp_single_var_constraints.get(list_length_name, [])
+                            length_result = self._random_vars[list_length_name].randomize(tmp_constraints, debug)
+                            result[list_length_name] = length_result
                             # Need to re-randomize all dependent vars as their
                             # length has changed.
-                            for dependent_var_name in dependent_var_list:
+                            for dependent_var_name in self._rand_list_lengths[list_length_name]:
                                 self._random_vars[dependent_var_name].set_rand_length(length_result)
                                 tmp_constraints = tmp_single_var_constraints.get(dependent_var_name, [])
                                 result[dependent_var_name] = self._random_vars[dependent_var_name].randomize(tmp_constraints, debug)
@@ -428,7 +435,7 @@ class RandObj:
                         if var in with_values:
                             continue
                         # Don't re-randomize list-length vars, those have been dealt with.
-                        if var in self._rand_lengths:
+                        if var in self._rand_list_lengths:
                             continue
                         # Don't re-randomize list vars which have been re-randomized once already.
                         rand_length = self._random_vars[var].rand_length
@@ -449,7 +456,7 @@ class RandObj:
             if problem_changed or self._problem_changed or self._multi_var_problem is None:
                 multi_var_problem = MultiVarProblem(
                     self,
-                    [var for var_name, var in random_vars if var_name in constrained_vars],
+                    [self._random_vars[var_name] for var_name in constrained_vars],
                     constraints,
                     max_iterations=self._max_iterations,
                     max_domain_size=self._max_domain_size,

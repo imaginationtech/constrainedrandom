@@ -1,14 +1,13 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2023 Imagination Technologies Ltd. All Rights Reserved
 
-import constraint
 from collections import defaultdict
-from typing import Any, Dict, Iterable, List, Optional, TYPE_CHECKING, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, TYPE_CHECKING, Union
 
 from .vargroup import VarGroup
 
 from .. import utils
-from ..debug import RandomizationDebugInfo, RandomizationFail
+from ..debug import RandomizationDebugInfo
 
 if TYPE_CHECKING:
     from ..randobj import RandObj
@@ -138,74 +137,65 @@ class MultiVarProblem:
         '''
         constraints = self.constraints
         sparse_solver = solutions_per_group is not None
-        solutions = []
-        solved_vars = []
+        solutions : List[Dict[str, Any]] = []
+        solved_vars : List[str] = []
 
-        # Respect assigned temporary values
+        # Respect assigned temporary values.
         if len(with_values) > 0:
             for var_name in with_values.keys():
                 solved_vars.append(var_name)
             solutions.append(with_values)
 
-        # If solving sparsely, we'll create a new problem for each group.
-        # If not solving sparsely, just create one big problem that we add to
-        # as we go along.
-        if not sparse_solver:
-            problem = constraint.Problem()
-            for var_name, value in with_values.items():
-                problem.addVariable(var_name, (value,))
-
+        # For each group, construct a problem and solve it.
         for group in groups:
-            if sparse_solver:
-                # Construct one problem per group, add solved variables from previous groups.
-                problem = constraint.Problem()
-            # Construct the appropriate group variable problem
-            group_problem = VarGroup(
-                group,
-                solved_vars,
-                problem,
-                constraints,
-                self.max_domain_size,
-                self.debug,
-            )
-
             group_solutions = None
+            group_problem = None
             attempts = 0
             while group_solutions is None or len(group_solutions) == 0:
+                # Early loop exit cases
                 if attempts >= max_iterations:
                     # We have failed, give up
                     return None
                 if attempts > 0 and not group_problem.can_retry():
                     # Not worth retrying - the same result will be obtained.
                     return None
-                if sparse_solver:
-                    if len(solutions) > 0:
-                        # Respect a proportion of the solution space, determined
-                        # by the sparsity/solutions_per_group.
+
+                # Determine what the starting state space for this group
+                # should be.
+                if sparse_solver and len(solutions) > 0:
+                    # Respect a proportion of the solution space, determined
+                    # by the sparsity/solutions_per_group.
+                        # Start by choosing a subset of the possible solutions.
                         if solutions_per_group >= len(solutions):
-                            solution_subset = solutions
+                            solution_subset = list(solutions)
                         else:
                             solution_subset = self.parent._get_random().choices(
                                 solutions,
                                 k=solutions_per_group
                             )
-                        if solutions_per_group == 1:
-                            for var_name, value in solution_subset[0].items():
-                                if var_name in problem._variables:
-                                    del problem._variables[var_name]
-                                problem.addVariable(var_name, (value,))
-                        else:
-                            solution_space = defaultdict(list)
-                            for soln in solution_subset:
-                                for var_name, value in soln.items():
-                                    # List is ~2x slower than set for 'in',
-                                    # but variables might be non-hashable.
-                                    if value not in solution_space[var_name]:
-                                        solution_space[var_name].append(value)
-                            for var_name, values in solution_space.items():
-                                if var_name in problem._variables:
-                                    del problem._variables[var_name]
-                                problem.addVariable(var_name, values)
+                else:
+                    # If not sparse, maintain the entire list of possible solutions.
+                    solution_subset = list(solutions)
+
+                # Translate this subset into a dictionary of the
+                # possible values for each variable.
+                solution_space = defaultdict(list)
+                for soln in solution_subset:
+                    for var_name, value in soln.items():
+                        # List is ~2x slower than set for 'in',
+                        # but variables might be non-hashable.
+                        if value not in solution_space[var_name]:
+                            solution_space[var_name].append(value)
+
+                # Construct the appropriate group variable problem.
+                # Must be done after selecting the solution space.
+                group_problem = VarGroup(
+                    group,
+                    solution_space,
+                    constraints,
+                    self.max_domain_size,
+                    self.debug,
+                )
 
                 # Attempt to solve the group
                 group_solutions = group_problem.solve(
