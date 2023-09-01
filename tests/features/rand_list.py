@@ -322,3 +322,88 @@ class RandListSparse(testutils.RandObjTestBase):
             self.assertEqual(sum, 0, "Sum must be zero but wasn't.")
             self.assertEqual(product % 3, 1, "Product mod 3 wasn't 1.")
         self.assertTrue(nonzero_seen, "Should not always solve this problem with a list full of zeroes.")
+
+
+class RandSizeList(testutils.RandObjTestBase):
+    '''
+    Test a randomized list, with a random size.
+    '''
+
+    ITERATIONS = 1000
+
+    def get_randobj(self, *args):
+        r = RandObj(*args)
+        r.add_rand_var('length', bits=4)
+        def not_7(x):
+            return x != 7
+        r.add_rand_var('listvar', bits=5, constraints=[not_7], rand_length='length')
+        return r
+
+    def check(self, results):
+        nonzero_seen = False
+        for result in results:
+            length = result['length']
+            listvar = result['listvar']
+            self.assertIn(length, range(16), "Length was incorrectly randomized")
+            self.assertIsInstance(listvar, list, "Var with length > 0 wasn't a list")
+            self.assertEqual(len(listvar), length, "Length incorrect")
+            for x in listvar:
+                self.assertIn(x, range(32), "Value was wrongly randomized")
+                self.assertNotEqual(x, 7, "Scalar constraint not respected")
+                if x != 0:
+                    nonzero_seen = True
+        self.assertTrue(nonzero_seen, "All values were zero")
+
+
+class RandSizeListConstrained(RandSizeList):
+    '''
+    Test a randomized list, with a random size.
+    Add constriants between the length and another variable.
+    '''
+
+    ITERATIONS = 1000
+
+    def get_randobj(self, *args):
+        r = super().get_randobj(*args)
+        r.add_rand_var('length_even', bits=1)
+        def length_ok(length, length_even):
+            if length_even:
+                return length % 2 == 0
+            else:
+                return length % 2 == 1
+        r.add_constraint(length_ok, ('length', 'length_even'))
+        return r
+
+    def check(self, results):
+        super().check(results)
+        for result in results:
+            length = result['length']
+            length_even = result['length_even']
+            if length_even:
+                self.assertEqual(length % 2, 0, "Length was odd, should be even")
+            else:
+                self.assertEqual(length % 2, 1, "Length was even, should be odd")
+
+
+class RandSizeListConstrainedMore(RandSizeListConstrained):
+    '''
+    Test a randomized list, with a random size.
+    Add constriants between the length and other variables,
+    and the length and the list.
+    '''
+
+    ITERATIONS = 500
+
+    def get_randobj(self, *args):
+        r = super().get_randobj(*args)
+        def not_in_list(x, listvar):
+            return x not in listvar
+        r.add_constraint(not_in_list, ('length', 'listvar'))
+        return r
+
+    def check(self, results):
+        super().check(results)
+        for result in results:
+            length = result['length']
+            listvar = result['listvar']
+            self.assertNotIn(length, listvar, "Length should not appear in list")
