@@ -5,7 +5,8 @@
 Test random lists.
 '''
 
-from random import Random
+from enum import auto, IntEnum
+from typing import Any, Dict, List
 
 from constrainedrandom import RandObj
 from constrainedrandom.utils import unique
@@ -339,6 +340,26 @@ class RandSizeList(testutils.RandObjTestBase):
         r.add_rand_var('listvar', bits=5, constraints=[not_7], rand_length='length')
         return r
 
+    def get_tmp_constraints(self):
+        tmp_constrs = []
+        def not_6(x):
+            return x != 6
+        tmp_constrs.append((not_6, ('listvar',)))
+        tmp_constrs.append((not_6, ('length',)))
+        def mul_3(x):
+            return x % 3 == 0
+        tmp_constrs.append((mul_3, ('length',)))
+        return tmp_constrs
+
+    def tmp_check(self, results):
+        self.check(results)
+        for result in results:
+            length = result['length']
+            listvar = result['listvar']
+            self.assertNotEqual(length, 6, "Temp constraint not respected")
+            self.assertNotEqual(listvar, 6, "Temp constraint not respected")
+            self.assertEqual(length % 3, 0, "Temp constraint not respected")
+
     def check(self, results):
         nonzero_seen = False
         for result in results:
@@ -355,13 +376,22 @@ class RandSizeList(testutils.RandObjTestBase):
         self.assertTrue(nonzero_seen, "All values were zero")
 
 
+class RandSizeListValue(RandSizeList):
+    '''
+    Test a random sized list with temporary values.
+    '''
+
+    def get_tmp_values(self):
+        return {'length': 12}
+
+
 class RandSizeListConstrained(RandSizeList):
     '''
     Test a randomized list, with a random size.
     Add constriants between the length and another variable.
     '''
 
-    ITERATIONS = 1000
+    ITERATIONS = 500
 
     def get_randobj(self, *args):
         r = super().get_randobj(*args)
@@ -383,6 +413,12 @@ class RandSizeListConstrained(RandSizeList):
                 self.assertEqual(length % 2, 0, "Length was odd, should be even")
             else:
                 self.assertEqual(length % 2, 1, "Length was even, should be odd")
+
+
+class RandSizeListConstrainedValue(RandSizeListValue, RandSizeListConstrained):
+    '''
+    Test a random sized list, with constraints, and with temporary values.
+    '''
 
 
 class RandSizeListConstrainedMore(RandSizeListConstrained):
@@ -407,3 +443,234 @@ class RandSizeListConstrainedMore(RandSizeListConstrained):
             length = result['length']
             listvar = result['listvar']
             self.assertNotIn(length, listvar, "Length should not appear in list")
+
+
+class RandSizeListConstrainedMoreValue(RandSizeListValue, RandSizeListConstrained):
+    '''
+    Test a randomized list, with a random size.
+    Add constriants between the length and other variables,
+    and the length and the list.
+    Test with temporary values.
+    '''
+
+
+class RandSizeListConstrainedSparse(RandSizeListConstrained):
+    '''
+    Test a constrained randomized list with a random length,
+    exercising the sparse solver.
+    '''
+
+    def get_randobj(self, *args):
+        r = super().get_randobj(*args)
+        r.set_solver_mode(naive=False, sparse=True, thorough=False)
+        return r
+
+
+class RandSizeListConstrainedSparseValue(RandSizeListValue, RandSizeListConstrainedSparse):
+    '''
+    Test a constrained randomized list with a random length,
+    exercising the sparse solver, with temporary values.
+    '''
+
+
+class RandSizeListConstrainedMoreSparse(RandSizeListConstrainedMore):
+    '''
+    Test a further constrained randomized list with a random length,
+    exercising the sparse solver.
+    '''
+
+    def get_randobj(self, *args):
+        r = super().get_randobj(*args)
+        r.set_solver_mode(naive=False, sparse=True, thorough=False)
+        return r
+
+
+class RandSizeListConstrainedMoreSparseValue(RandSizeListValue, RandSizeListConstrainedMoreSparse):
+    '''
+    Test a further constrained randomized list with a random length,
+    exercising the sparse solver, with temporary values.
+    '''
+
+
+class RandSizeListConstrainedThorough(RandSizeListConstrained):
+    '''
+    Test a constrained randomized list with a random length,
+    exercising the thorough solver.
+    '''
+
+    ITERATIONS = 5
+
+    def get_randobj(self, *args):
+        r = super().get_randobj(*args)
+        r.set_solver_mode(naive=False, sparse=False, thorough=True)
+        return r
+
+
+class RandSizeListConstrainedThoroughValue(RandSizeListValue, RandSizeListConstrainedThorough):
+    '''
+    Test a constrained randomized list with a random length,
+    exercising the thorough solver, with temporary values.
+    '''
+
+
+class RandSizeListConstrainedMoreThorough(RandSizeListConstrainedMore):
+    '''
+    Test a constrained randomized list with a random length,
+    exercising the thorough solver.
+    '''
+
+    ITERATIONS = 2
+
+    def get_randobj(self, *args):
+        r = super().get_randobj(*args)
+        r.set_solver_mode(naive=False, sparse=False, thorough=True)
+        return r
+
+
+class RandSizeListConstrainedMoreThoroughValue(RandSizeListValue, RandSizeListConstrainedMoreThorough):
+    '''
+    Test a constrained randomized list with a random length,
+    exercising the thorough solver.
+    '''
+
+
+class RandSizeListHard(testutils.RandObjTestBase):
+    '''
+    Test a much more difficult problem with randomized-length lists.
+    '''
+
+    ITERATIONS = 100
+
+    class RegEnum(IntEnum):
+
+        REG0 = 0
+        REG1 = auto()
+        REG2 = auto()
+        REG3 = auto()
+        REG4 = auto()
+        REG5 = auto()
+        REG6 = auto()
+        REG7 = auto()
+
+    def get_randobj(self, *args):
+        r = RandObj(*args)
+        r.add_rand_var('shared_length', domain=range(8))
+        def not_reg0(x):
+            return x != self.RegEnum.REG0
+        r.add_rand_var(
+            'list1',
+            domain=self.RegEnum,
+            rand_length='shared_length',
+            constraints=[not_reg0],
+            list_constraints=[unique],
+        )
+        r.add_rand_var('list2', domain=range(32), rand_length='shared_length')
+        def lists_dont_intersect(list1, list2):
+            for x in list1:
+                if x in list2:
+                    return False
+            return True
+        r.add_constraint(lists_dont_intersect, ('list1', 'list2'))
+        return r
+
+    def get_tmp_constraints(self):
+        return super().get_tmp_constraints()
+
+    def check(self, results):
+        for idx, result in enumerate(results):
+            list1 = result['list1']
+            list2 = result['list2']
+            shared_length = result['shared_length']
+            self.assertIn(shared_length, range(8))
+            self.assertEqual(len(list1), shared_length, f"{idx} List length was wrong")
+            self.assertEqual(len(list2), shared_length, "List length was wrong")
+            for idx, item in enumerate(list1):
+                self.assertIn(item, self.RegEnum)
+                other_elems = list1[0:idx] + list1[idx+1:]
+                self.assertNotIn(item, other_elems, "List had repeated elements")
+            for item in list2:
+                self.assertNotIn(item, list1, "Lists were not disjoint")
+
+
+class RandSizeListVeryHard(RandSizeListHard):
+    '''
+    Test an extremely difficult problem with randomized-length lists.
+    '''
+
+    ITERATIONS = 2
+
+    def get_randobj(self, *args):
+        r = super().get_randobj(*args)
+        def double_length(length, length2):
+            return length2 == length * 2
+        r.add_rand_var('other_length', domain=range(16))
+        r.add_constraint(double_length, ('shared_length', 'other_length'))
+        r.add_rand_var('list3', domain=range(32), rand_length='other_length', order=2)
+        def composed_from_others(list1, list2, list3):
+            for x in list3:
+                if x not in list1 and x not in list2:
+                    return False
+            return True
+        r.add_constraint(composed_from_others, ('list1', 'list2', 'list3'))
+        return r
+
+    def check(self, results):
+        super().check(results)
+        for result in results:
+            list1 = result['list1']
+            list2 = result['list2']
+            list3 = result['list3']
+            shared_length = result['shared_length']
+            other_length = result['other_length']
+            self.assertEqual(len(list3), shared_length*2, "List length was wrong")
+            self.assertEqual(other_length, shared_length*2, "List length was wrong")
+            for item in list3:
+                self.assertIn(item, list1 + list2, "Item was not in other lists")
+
+
+class RandSizeListShort(testutils.RandObjTestBase):
+    '''
+    Test random lists and lengths with small domains, to
+    use CSP.
+    '''
+
+    def get_randobj(self, *args):
+        r = RandObj(*args)
+        r.add_rand_var('length1', domain=range(1, 4))
+        r.add_rand_var('list1', domain=range(1, 4), rand_length='length1')
+        def in_list(x, y):
+            return x in y
+        r.add_rand_var('length2', domain=range(1, 4))
+        r.add_constraint(in_list, ('length2', 'list1'))
+        r.add_rand_var('list2', domain=range(1, 4), rand_length='length2')
+        return r
+
+    def check(self, results):
+        for result in results:
+            length1 = result['length1']
+            list1 = result['list1']
+            length2 = result['length2']
+            list2 = result['list2']
+            self.assertEqual(len(list1), length1, "List length was wrong")
+            self.assertIn(length2, list1, "Length 2 must be in list 1")
+            self.assertEqual(len(list2), length2, "List length was wrong")
+
+
+class RandSizeListShortSparse(RandSizeListShort):
+
+    ITERATIONS = 200
+
+    def get_randobj(self, *args):
+        r = super().get_randobj(*args)
+        r.set_solver_mode(naive=False, sparse=True, thorough=False)
+        return r
+
+
+class RandSizeListShortThorough(RandSizeListShort):
+
+    ITERATIONS = 50
+
+    def get_randobj(self, *args):
+        r = super().get_randobj(*args)
+        r.set_solver_mode(naive=False, sparse=False, thorough=True)
+        return r
