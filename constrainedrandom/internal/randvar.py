@@ -253,6 +253,14 @@ class RandVar:
                 " but none was given when get_length was called.")
         return self.rand_length_val
 
+    def is_list(self) -> bool:
+        '''
+        Returns ``True`` if this is a list variable.
+
+        :return: ``True`` if this is a list variable, otherwise ``False``.
+        '''
+        return self.length is not None or self.rand_length is not None
+
     def set_rand_length(self, length: int) -> None:
         '''
         Function to set the random length.
@@ -282,10 +290,13 @@ class RandVar:
             return random
         return self._random
 
-    def get_domain_size(self) -> int:
+    def get_domain_size(self, possible_lengths: Optional[List[int]]=None) -> int:
         '''
         Return total domain size, accounting for length of this random variable.
 
+        :param possible_lengths: Optional, when there is more than one possiblity
+            for the value of the random length, specifies a list of the
+            possibilities.
         :return: domain size, integer.
         '''
         if self.domain is None:
@@ -293,20 +304,34 @@ class RandVar:
             # of this variable. Return 1.
             return 1
         else:
-            length = self.get_length()
-            if length is None:
-                # length is None implies a scalar variable.
-                return len(self.domain)
-            elif length == 0:
-                # This is a zero-length list, adding no complexity.
-                return 1
-            elif length == 1:
-                return len(self.domain)
+            # possible_lengths is used when the variable has a random
+            # length and that length is not yet fully determined.
+            if possible_lengths is None:
+                # Normal, fixed length of some description.
+                length = self.get_length()
+                if length is None:
+                    # length is None implies a scalar variable.
+                    return len(self.domain)
+                elif length == 0:
+                    # This is a zero-length list, adding no complexity.
+                    return 1
+                elif length == 1:
+                    return len(self.domain)
+                else:
+                    # In this case it is effectively cartesian product, i.e.
+                    # n ** k, where n is the size of the domain and k is the length
+                    # of the list.
+                    return len(self.domain) ** length
             else:
-                # In this case it is effectively cartesian product, i.e.
-                # n ** k, where n is the size of the domain and k is the length
-                # of the list.
-                return len(self.domain) ** length
+                # Random length which could be one of a number of values.
+                assert self.rand_length is not None, "Cannot use possible_lengths " \
+                    "for a variable with non-random length."
+                # For each possible length, the domain is the cartesian
+                # product as above, but added together.
+                total = 0
+                for poss_len in possible_lengths:
+                    total += len(self.domain) ** poss_len
+                return total
 
     def can_use_with_constraint(self) -> bool:
         '''
@@ -321,30 +346,42 @@ class RandVar:
         # and the domain isn't a dictionary.
         return self.domain is not None and not isinstance(self.domain, dict)
 
-    def get_constraint_domain(self) -> utils.Domain:
+    def get_constraint_domain(self, possible_lengths: Optional[List[int]]=None) -> utils.Domain:
         '''
         Get a ``constraint`` package friendly version of the domain
         of this random variable.
 
+        :param possible_lengths: Optional, when there is more than one possiblity
+            for the value of the random length, specifies a list of the
+            possibilities.
         :return: the variable's domain in a format that will work
             with the ``constraint`` package.
         '''
-        length = self.get_length()
-        if length is None:
-            # Straightforward, scalar
-            return self.domain
-        elif length == 0:
-            # List of length zero - an empty list is only correct choice.
-            return [[]]
-        elif length == 1:
-            # List of length one
-            return [[x] for x in self.domain]
+        if possible_lengths is None:
+            length = self.get_length()
+            if length is None:
+                # Straightforward, scalar
+                return self.domain
+            elif length == 0:
+                # List of length zero - an empty list is only correct choice.
+                return [[]]
+            elif length == 1:
+                # List of length one
+                return [[x] for x in self.domain]
+            else:
+                # List of greater length, cartesian product.
+                # Beware that this may be an extremely large domain.
+                # Ensure each element is of type list, which is what
+                # we want to return.
+                return [list(x) for x in product(self.domain, repeat=length)]
         else:
-            # List of greater length, cartesian product.
-            # Beware that this may be an extremely large domain.
-            # Ensure each element is of type list, which is what
-            # we want to return.
-            return [list(x) for x in product(self.domain, repeat=length)]
+            # For each possible length, return the possible domains.
+            # This can get extremely large, even more so than
+            # the regular product.
+            result = []
+            for poss_len in possible_lengths:
+                result += [list(x) for x in product(self.domain, repeat=poss_len)]
+            return result
 
     def randomize_once(self, constraints: Iterable[utils.Constraint], check_constraints: bool, debug: bool) -> Any:
         '''
