@@ -419,7 +419,7 @@ However, the following is *not* OK because the ``rand_mul_by_4`` function is not
 Random list variables
 _____________________
 
-Sometimes, we might want to produce a list of randomized values. ``constrainedrandom`` supports this. You can turn a random variable into a list by supplying the ``length`` argument. ``length=0`` is the default behaviour, i.e. a scalar value. ``length=1`` means a list of one randomized value, similarly ``length=N`` means a list of N randomized values.
+Sometimes, we might want to produce a list of randomized values. ``constrainedrandom`` supports this. You can turn a random variable into a list by supplying the ``length`` argument. ``length=None`` is the default behaviour, i.e. a scalar value. ``length=1`` means a list of one randomized value, similarly ``length=N`` means a list of N randomized values. ``length=0`` is a list of length zero, i.e. the empty list, ``[]``. This is permitted for completeness' sake.
 
 Here is an example of a randomized list variable.
 
@@ -436,6 +436,48 @@ Here is an example of a randomized list variable.
     r.randomize()
 
 See the section below on :ref:`List Constraints` to see how adding constraints to this kind of variable works.
+
+Random list with random length
+______________________________
+
+If the user desires the length of a random list to be randomized, this can also be achieved with ``constrainedrandom``.
+
+Firstly, add a random variable that will be used to determine the length of the random list.
+
+Secondly, add the random list variable, using the ``rand_length`` argument. Specify the name of the variable that determines the random length which was previously added.
+
+E.g. this code adds a variable and then uses it as a random length:
+
+
+..  code-block:: python
+
+    import random
+
+    from constrainedrandom import RandObj
+
+    random.seed(0)
+    r = RandObj()
+
+    # Add varaible to use as random length, between 0 and 9
+    r.add_rand_var('rand_length', domain=range(10))
+    # Use this variable as the rand_length argument to a list,
+    # meaning the list will have length equal to rand_length
+    # upon randomization.
+    r.add_rand_var('rand_list', bits=8, rand_length='rand_length')
+    r.randomize()
+    print(r.get_results())
+    # Prints:
+    # {'rand_length': 6, 'rand_list': [194, 227, 107, 10, 66, 247]}
+
+.. note::
+    ``length`` and ``rand_length`` are mutually-exclusive arguments - the length is either fixed or random.
+
+.. warning::
+    Be careful of using a variable for ``rand_length`` which might give an illegal list length. List lengths are illegal if they are not an instance of ``int``, or if they are less than zero. E.g. using a variable for ``rand_length`` whose domain includes negative numbers might result in errors.
+
+.. note::
+    Using ``rand_length`` and ``order`` together may mean that ``order`` is ignored. The library will ensure that a variable used as a random length will always be randomized prior to the list that relies on it. If the user tries to specify an order that defies this principle, it will be ignored with no error or warning message.
+
 
 Initial values
 ______________
