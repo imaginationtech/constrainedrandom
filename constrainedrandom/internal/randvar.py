@@ -275,6 +275,7 @@ class RandVar:
         if self.rand_length is None:
             raise RuntimeError("RandVar was not marked as having a random length," \
                 " but set_rand_length was called.")
+        assert length >= 0, "length was not greater than or equal to zero"
         self.rand_length_val = length
 
     def _get_random(self) -> random.Random:

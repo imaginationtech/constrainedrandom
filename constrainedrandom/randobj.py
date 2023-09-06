@@ -209,6 +209,8 @@ class RandObj:
         # rand_length and length are mutually-exclusive.
         assert not ((length is not None) and (rand_length is not None)), \
             "length and rand_length are mutually-exclusive, but both were specified"
+        if length is not None:
+            assert length >= 0, "length was not greater than or equal to zero"
         if rand_length is not None:
             # Indicates the length of the RandVar depends on another random variable.
             assert rand_length in self._random_vars, f"random variable length '{name}' is not valid," \
