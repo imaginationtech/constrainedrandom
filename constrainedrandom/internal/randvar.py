@@ -72,6 +72,8 @@ class RandVar:
         size, we don't use the ``constraint`` package, but just use ``random`` instead.
     :param disable_naive_list_solver: Attempt to use a faster algorithm for solving
         list problems. May be faster, but may negatively impact quality of results.
+    :raises RuntimeError: If mutually-excliusive args are used together.
+    :raises TypeError: If wrong types are used.
     '''
 
     def __init__(self,
@@ -97,26 +99,27 @@ class RandVar:
         self.length = length
         self.rand_length = rand_length
         self.rand_length_val = None
-        assert not ((length is not None) and (rand_length is not None)), \
-            "length and rand_length are mutually-exclusive, but both were specified"
+        if (length is not None) and (rand_length is not None):
+            raise RuntimeError("'length' and 'rand_length' are mutually-exclusive, but both were specified.")
         self.max_iterations = max_iterations
         self.max_domain_size = max_domain_size
-        assert ((domain is not None) != (fn is not None)) != (bits is not None), \
-            "Must specify exactly one of fn, domain or bits"
+        if not (((domain is not None) != (fn is not None)) != (bits is not None)):
+            raise RuntimeError("The user must specify exactly one of 'fn', 'domain' or 'bits', but more than one was specified.")
         if fn is None:
-            assert args is None, "args has no effect without fn"
+            if args is not None:
+                raise RuntimeError("'args' has no effect without 'fn', but was provided without 'fn'")
         self.domain = domain
         self.bits = bits
         self.fn = fn
         self.args = args
         self.constraints = constraints if constraints is not None else []
-        assert isinstance(self.constraints, list) or isinstance(self.constraints, tuple), \
-            "constraints was bad type, should be list or tuple"
+        if not (isinstance(self.constraints, list) or isinstance(self.constraints, tuple)):
+            raise TypeError("constraints was bad type, should be list or tuple")
         if not isinstance(self.constraints, list):
             self.constraints = list(self.constraints)
         self.list_constraints = list_constraints if list_constraints is not None else []
-        assert isinstance(self.list_constraints, list) or isinstance(self.list_constraints, tuple), \
-            "list_constraints was bad type, should be list or tuple"
+        if not (isinstance(self.list_constraints, list) or isinstance(self.list_constraints, tuple)):
+            raise TypeError("list_constraints was bad type, should be list or tuple")
         if not isinstance(self.list_constraints, list):
             self.list_constraints = list(self.list_constraints)
         # Default strategy is to randomize and check the constraints.
@@ -271,11 +274,13 @@ class RandVar:
 
         :raises RuntimeError: If this variable instance is not
             marked as one with a random length.
+        :raises ValueError: If random length is negative.
         '''
         if self.rand_length is None:
             raise RuntimeError("RandVar was not marked as having a random length," \
                 " but set_rand_length was called.")
-        assert length >= 0, "length was not greater than or equal to zero"
+        if length < 0:
+            raise ValueError(f"Random list length was negative for variable '{self.name}'.")
         self.rand_length_val = length
 
     def _get_random(self) -> random.Random:

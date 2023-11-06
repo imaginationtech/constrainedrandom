@@ -100,7 +100,7 @@ class NegativeLength(testutils.RandObjTestBase):
     Test a random list with negative length.
     '''
 
-    EXPECTED_ERROR_INIT = AssertionError
+    EXPECTED_ERROR_INIT = ValueError
 
     def get_randobj(self, *args):
         randobj = RandObj(*args)
@@ -113,7 +113,7 @@ class NegativeRandLength(testutils.RandObjTestBase):
     Test a random list with negative random length.
     '''
 
-    EXPECTED_ERROR_RAND = AssertionError
+    EXPECTED_ERROR_RAND = ValueError
 
     def get_randobj(self, *args):
         randobj = RandObj(*args)

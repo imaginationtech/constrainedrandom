@@ -174,7 +174,8 @@ class RandObj:
         :param disable_naive_list_solver: Attempt to use a faster algorithm for solving
             list problems. May be faster, but may negatively impact quality of results.
         :return: ``None``
-        :raises AssertionError: If inputs are not valid.
+        :raises ValueError: If inputs are not valid.
+        :raises RuntimeError: If mutually-exclusive inputs are specified together.
 
         :example:
 
@@ -204,19 +205,23 @@ class RandObj:
             rand_obj.add_rand_var('fn_based_with_args', fn=my_fn, args=(2,))
         '''
         # Check this is a valid name
-        assert name not in self.__dict__, f"random variable name '{name}' is not valid, already exists in object"
-        assert name not in self._random_vars, f"random variable name '{name}' is not valid, already exists in random variables"
+        if name in self.__dict__:
+            raise ValueError(f"random variable name '{name}' is not valid, already exists in object")
+        if name in self._random_vars:
+            raise ValueError(f"random variable name '{name}' is not valid, already exists in random variables")
         # rand_length and length are mutually-exclusive.
-        assert not ((length is not None) and (rand_length is not None)), \
-            "length and rand_length are mutually-exclusive, but both were specified"
-        if length is not None:
-            assert length >= 0, "length was not greater than or equal to zero"
+        if (length is not None) and (rand_length is not None):
+            raise RuntimeError("'length' and 'rand_length' are mutually-exclusive, but both were specified")
+        if length is not None and length < 0:
+            raise ValueError("length was negative, must be zero or positive.")
         if rand_length is not None:
             # Indicates the length of the RandVar depends on another random variable.
-            assert rand_length in self._random_vars, f"random variable length '{name}' is not valid," \
-                " it must be a fixed integer value or the name of an existing random variable."
-            assert self._random_vars[rand_length].length is None, f"random length '{name}' must be a scalar random" \
-                " variable, but is itself a random list."
+            if rand_length not in self._random_vars:
+                raise ValueError(f"random variable length '{name}' is not valid," \
+                    " it must be the name of an existing random variable.")
+            if self._random_vars[rand_length].length is not None:
+                raise ValueError(f"random length '{name}' must be a scalar random" \
+                " variable, but is itself a random list.")
             # Track that this variable depends on another for its length.
             self._rand_list_lengths[rand_length].append(name)
             # Ensure the order used for this variable is greater than
@@ -259,7 +264,7 @@ class RandObj:
         :param variables: A tuple/list of variables affected by this constraint.
             The order matters, this order will be preserved when passing variables into the constraint.
         :return: ``None``
-        :raises AssertionError: If any member of ``variables`` is not a valid random variable.
+        :raises KeyError: If any member of ``variables`` is not a valid random variable.
         :raises TypeError: If type of ``variables`` is not str, list or tuple.
 
         :example:
@@ -289,8 +294,8 @@ class RandObj:
                 # Multi-variable constraint
                 self._constraints.append((constr, variables))
                 for var in variables:
-                    assert var in self._random_vars, \
-                        f"Variable {var} was not in the set of random variables!"
+                    if var not in self._random_vars:
+                        raise KeyError(f"Variable '{var}' was not in the set of random variables!")
                     self._constrained_vars.add(var)
                     # If var constrains other variables' lengths,
                     # those other variables must also be considered
@@ -330,6 +335,8 @@ class RandObj:
             all debug info along the way and not just the final failure.
         :raises RandomizationError: If no solution is found
             that satisfies the defined constraints.
+        :raises TypeError: If types are incorrect.
+        :raises ValueError: If no variables are supplied for a given constraint.
         '''
         self.pre_randomize()
 
@@ -345,9 +352,10 @@ class RandObj:
         problem_changed = False
         if with_constraints is not None:
             for constr, vars in with_constraints:
-                assert isinstance(vars, Iterable), \
-                    "with_constraints should specify a list of tuples of (constraint, Iterable[variables])"
-                assert len(vars) > 0, "Cannot add a constraint that applies to no variables"
+                if not isinstance(vars, Iterable):
+                    raise TypeError("with_constraints should specify a list of tuples of (constraint, Iterable[variables])")
+                if not len(vars) > 0:
+                    raise ValueError("Cannot add a constraint that applies to no variables")
                 if len(vars) == 1:
                     # Single-variable constraint
                     tmp_single_var_constraints[vars[0]].append(constr)

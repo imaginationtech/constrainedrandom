@@ -17,9 +17,10 @@ def get_bitslice(val: int, hi: int, lo: int):
     :param hi: The highest bit index of the desired slice.
     :param hi: The lowest bit index of the desired slice.
     :return: The requested bit slice.
-    :raises AssertionError: If lo > hi.
+    :raises ValueError: If lo > hi.
     '''
-    assert lo <= hi, "low index must be less than or equal to high index"
+    if lo > hi:
+        raise ValueError("low index must be less than or equal to high index")
     size = hi - lo + 1
     mask = (1 << size) - 1
     return (val >> lo) & mask
@@ -40,9 +41,10 @@ def set_bitslice(val: int, hi: int, lo: int, new_val: int):
     :param hi: The lowest bit index of the desired slice.
     :param new_val: The new value to be assigned to the slice.
     :return: The modified value.
-    :raises AssertionError: If lo > hi.
+    :raises ValueError: If lo > hi.
     '''
-    assert lo <= hi, "low index must be less than or equal to high index"
+    if lo > hi:
+        raise ValueError("low index must be less than or equal to high index")
     size = hi - lo + 1
     mask = (1 << size) - 1
     new_val = new_val & mask

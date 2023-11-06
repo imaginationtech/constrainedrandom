@@ -44,6 +44,6 @@ class BitsliceTests(unittest.TestCase):
     def test_errors(self):
         print("Testing bitslice errors...")
         # lo > hi
-        self.assertRaises(AssertionError, get_bitslice, 0xdeadbeef, 3, 5)
-        self.assertRaises(AssertionError, set_bitslice, 0xdeadbeef, 3, 5, 3)
+        self.assertRaises(ValueError, get_bitslice, 0xdeadbeef, 3, 5)
+        self.assertRaises(ValueError, set_bitslice, 0xdeadbeef, 3, 5, 3)
         print("... done testing bitslice errors.")
