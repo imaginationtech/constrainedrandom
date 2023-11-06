@@ -20,6 +20,7 @@ from .features.basic import *
 from .features.errors import *
 from .features.rand_list import *
 from .features.temp import *
+from .features.user import *
 
 
 def parse_args():
