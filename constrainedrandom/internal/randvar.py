@@ -183,26 +183,43 @@ class RandVar:
                 raise TypeError(f'RandVar was passed a domain of bad type - {self.domain}. '
                                 'This was an Iterable but could not be converted to tuple.')
             is_list_or_tuple = True
+
+        # If we are provided a sufficiently small domain and we have constraints,
+        # simply construct a constraint solution problem and choose randomly from the
+        # possible solutions.
         if self.check_constraints and (is_range or is_list_or_tuple) and len(self.domain) < self.max_domain_size:
-            # If we are provided a sufficiently small domain and we have constraints, simply construct a
-            # constraint solution problem instead.
             problem = constraint.Problem()
             problem.addVariable(self.name, self.domain)
             for con in self.constraints:
                 problem.addConstraint(con, (self.name,))
-            # Produces a list of dictionaries - index it up front for very marginal
-            # performance gains
-            solutions = problem.getSolutions()
-            if len(solutions) == 0:
-                debug_fail = RandomizationFail([self.name],
-                    [(c, (self.name,)) for c in self.constraints])
-                debug_info = RandomizationDebugInfo()
-                debug_info.add_failure(debug_fail)
-                raise utils.RandomizationError("Variable was unsolvable. Check constraints.", debug_info)
-            solution_list = [s[self.name] for s in solutions]
-            self.check_constraints = False
-            return partial(self._get_random().choice, solution_list)
-        elif self.bits is not None:
+
+            # This call to getSolutions may fail, as we are running it sooner
+            # than the user knows. The user expects the constraint only to be
+            # called during randomization, but this function will be called
+            # when adding new constraints.
+            # Allow for it failing, and move on to the other ways to generate
+            # a randomizer if it does.
+            try:
+                solutions = problem.getSolutions()
+            except:
+                solutions = None
+
+            if solutions is not None:
+                # If we can't get any solutions, it's an intractable problem.
+                if len(solutions) == 0:
+                    debug_fail = RandomizationFail([self.name],
+                        [(c, (self.name,)) for c in self.constraints])
+                    debug_info = RandomizationDebugInfo()
+                    debug_info.add_failure(debug_fail)
+                    raise utils.RandomizationError("Variable was unsolvable. Check constraints.", debug_info)
+                # getSolutions produces a list of dictionaries - index it
+                # up front for very marginal performance gains
+                solution_list = [s[self.name] for s in solutions]
+                self.check_constraints = False
+                return partial(self._get_random().choice, solution_list)
+
+        # Fall through to a standard randomizer which randomizes and checks.
+        if self.bits is not None:
             # Ideally here we would use:
             # return partial(self._get_random().getrandbits, self.bits)
             # as it seems that getrandbits is 10x faster than randrange.
