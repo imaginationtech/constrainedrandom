@@ -110,6 +110,23 @@ class BitsLargeWidth(testutils.RandObjTestBase):
             self.assertNotEqual(result['uint256_t'], 1)
 
 
+class BitsLargeWidthMultiVar(testutils.RandObjTestBase):
+    '''
+    Test that large values of bits works with multi variable
+    dependencies.
+    '''
+
+    def get_randobj(self, *args):
+        r = RandObj(*args)
+        r.add_rand_var('big', bits=64)
+        r.add_rand_var('small', bits=4)
+        def mul_lt_big(a, b):
+            return a * b < (1 << 64)
+        r.add_constraint(mul_lt_big, ('big', 'small'))
+        r.set_solver_mode(naive=False, sparse=True, thorough=True)
+        return r
+
+
 class MultiBasic(testutils.RandObjTestBase):
     '''
     Test a basic multi-variable constraint (easy to randomly fulfill the constraint).
