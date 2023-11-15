@@ -187,7 +187,8 @@ class RandVar:
         # If we are provided a sufficiently small domain and we have constraints,
         # simply construct a constraint solution problem and choose randomly from the
         # possible solutions.
-        if self.check_constraints and (is_range or is_list_or_tuple) and len(self.domain) < self.max_domain_size:
+        if self.check_constraints and (is_range or is_list_or_tuple) and \
+            self.get_domain_size_raw() < self.max_domain_size:
             problem = constraint.Problem()
             problem.addVariable(self.name, self.domain)
             for con in self.constraints:
@@ -313,6 +314,21 @@ class RandVar:
             return random
         return self._random
 
+    def get_domain_size_raw(self) -> int:
+        '''
+        Return raw domain size, based only on the domain and not length.
+
+        :return: domain size, integer.
+        '''
+        # domain might be too large to perform `len` on.
+        # Catch the exception here (once), and use the size
+        # of a 64-bit integer.
+        try:
+            len_domain = len(self.domain)
+        except OverflowError:
+            len_domain = 1 << 64
+        return len_domain
+
     def get_domain_size(self, possible_lengths: Optional[List[int]]=None) -> int:
         '''
         Return total domain size, accounting for length of this random variable.
@@ -327,6 +343,7 @@ class RandVar:
             # of this variable. Return 1.
             return 1
         else:
+            len_domain = self.get_domain_size_raw()
             # possible_lengths is used when the variable has a random
             # length and that length is not yet fully determined.
             if possible_lengths is None:
@@ -334,17 +351,17 @@ class RandVar:
                 length = self.get_length()
                 if length is None:
                     # length is None implies a scalar variable.
-                    return len(self.domain)
+                    return len_domain
                 elif length == 0:
                     # This is a zero-length list, adding no complexity.
                     return 1
                 elif length == 1:
-                    return len(self.domain)
+                    return len_domain
                 else:
                     # In this case it is effectively cartesian product, i.e.
                     # n ** k, where n is the size of the domain and k is the length
                     # of the list.
-                    return len(self.domain) ** length
+                    return len_domain ** length
             else:
                 # Random length which could be one of a number of values.
                 assert self.rand_length is not None, "Cannot use possible_lengths " \
@@ -353,7 +370,7 @@ class RandVar:
                 # product as above, but added together.
                 total = 0
                 for poss_len in possible_lengths:
-                    total += len(self.domain) ** poss_len
+                    total += len_domain ** poss_len
                 return total
 
     def can_use_with_constraint(self) -> bool:
