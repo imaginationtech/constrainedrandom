@@ -828,6 +828,94 @@ We can mix temporary values with temporary constraints:
     print(r.op0, r.op1)
 
 
+Class-based constraints
+_______________________
+
+If an object inherits from ``RandObj``, it may use class methods as constraints. Class methods will not be used as constraints by default unless added with ``add_constraint``. They must be added as constraints in the normal way, e.g. ``self.add_constraint(self.methodname, ('random_variable1', 'random_variable2'))``.
+
+Class methods used as constraints may refer to non-random member variables of the class via the ``self`` argument.
+
+.. code-block:: python
+
+    from constrainedrandom import RandObj
+
+
+    class MyRandObj(RandObj):
+
+        def __init__(self, min_val, max_val, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.add_rand_var('value', domain=range(10))
+            self.min_val = min_val
+            self.max_val = max_val
+            # We need to register the class method as a constraint,
+            # and we still need to pass it the list of random variables
+            # it operates on.
+            self.add_constraint(self.value_c, ('value',))
+
+        def value_c(self, value):
+            # This function still must take arguments corresponding
+            # to the random variables it checks.
+            return self.min_val <= value <= self.max_val
+
+        def set_min_max(self, new_min, new_max):
+            # This is not used as a constraint, because it is not added
+            # using `add_constraint`
+            self.min_val = new_min
+            self.max_val = new_max
+
+    myrandobj = MyRandObj(2, 8)
+    myrandobj.randomize()
+    print(myrandobj.value)
+    myrandobj.set_min_max(3, 7)
+    myrandobj.randomize()
+    print(myrandobj.value)
+
+
+Class methods used as constraints must still accept randomizable variables as arguments. Users should not refer to random variables using the ``self`` argument inside a constraint, because this refers to the previous value, not the one being randomized and checked when ``randomize()`` is called.
+
+For example, **the below is not correct** and **will not behave as desired**:
+
+.. code-block:: python
+
+    # This is wrong - don't do this!
+    class BadRandObj(RandObj):
+
+        def __init__(self, min_val, max_val, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.add_rand_var('value', domain=range(10))
+            self.min_val = min_val
+            self.max_val = max_val
+            self.add_constraint(self.value_c, [])
+
+        def value_c(self):
+            # `self.value` here refers to the old value,
+            # so this doesn't do what we want:
+            return self.min_val <= self.value <= self.max_val
+
+Think of the values being passed to the constraint as the new values being checked, and anything under ``self`` as the previous set of values stored in the class before ``randomize()`` is called.
+
+``constrainedrandom`` currently has the limitation that the user has to distinguish between random and non-random variables in this way. This can be addressed in the future for added user-friendliness.
+
+
+Class-based constraints and inheritance
+_______________________________________
+
+We can use normal Python inheritance to override constraints in child classes. Using the correct ``MyRandObj`` from above, we can create a child class, and override ``value_c`` to check the value is even:
+
+.. code-block:: python
+
+    class ChildClass(MyRandObj):
+
+        def value_c(self, value):
+            return self.min_val <= value <= self.max_val and value % 2 == 0
+
+    child = ChildClass(2, 8)
+    child.randomize()
+    print(child.value)
+
+This works because the parent constructor will use the overridden ``value_c`` when adding as a constraint it in its constructor. It has to have the same arguments as the parent ``value_c`` in order to work correctly.
+
+
 ``pre_randomize`` and ``post-randomize``
 ----------------------------------------
 
