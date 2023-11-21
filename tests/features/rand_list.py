@@ -554,7 +554,7 @@ class RandSizeListHard(testutils.RandObjTestBase):
 
     def get_randobj(self, *args):
         r = RandObj(*args)
-        r.add_rand_var('shared_length', domain=range(8))
+        r.add_rand_var('shared_length', domain=range(1, 8))
         def not_reg0(x):
             return x != self.RegEnum.REG0
         r.add_rand_var(
