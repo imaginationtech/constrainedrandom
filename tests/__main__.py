@@ -16,6 +16,7 @@ from . import testutils
 # Import all tests for unittest to run
 from .bits import *
 from .determinism import *
+from .is_pure import *
 from .features.basic import *
 from .features.classes import *
 from .features.errors import *

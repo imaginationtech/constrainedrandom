@@ -5,7 +5,7 @@
 Miscellaneous utilities for the constrainedrandom package.
 '''
 
-
+from inspect import getclosurevars
 from typing import Any, Callable, Dict, Iterable, List, Tuple, Union
 
 
@@ -53,4 +53,32 @@ def unique(list_variable: Iterable[Any]) -> bool:
         if i in seen:
             return False
         seen.add(i)
+    return True
+
+
+def is_pure(function: Callable) -> bool:
+    '''
+    Determine whether a function is "pure", i.e. its return value
+    is only influenced by its arguments when it is called and by
+    nothing else..
+
+    :param function: Callable to determine whether it is pure.
+    :return: ``True`` if "pure", ``False`` otherwise,
+    '''
+    # A function with __self__ attribute is bound to a class instance,
+    # and is therefore not pure.
+    if hasattr(function, '__self__'):
+        return False
+    # A function that has closure variables that are nonlocal or global
+    # is impure. We count functions that use builtins as pure, assuming
+    # those builtins themselves are pure.
+    closure = getclosurevars(function)
+    if len(closure.nonlocals) > 0 or len(closure.globals) > 0:
+        return False
+    # Look at default argument values. If they point to mutable objects,
+    # this is not a pure function.
+    if function.__defaults__ is not None:
+        for default_val in function.__defaults__:
+            if type(default_val) not in (str, int, bool, float, tuple, complex, bytes):
+                return False
     return True
