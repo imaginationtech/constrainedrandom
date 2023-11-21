@@ -113,6 +113,10 @@ class RandVar:
         self.fn = fn
         self.args = args
         self.constraints = constraints if constraints is not None else []
+        self.has_impure_constraints = False
+        for constr in self.constraints:
+            if not utils.is_pure(constr):
+                self.has_impure_constraints = True
         if not (isinstance(self.constraints, list) or isinstance(self.constraints, tuple)):
             raise TypeError("constraints was bad type, should be list or tuple")
         if not isinstance(self.constraints, list):
@@ -187,7 +191,10 @@ class RandVar:
         # If we are provided a sufficiently small domain and we have constraints,
         # simply construct a constraint solution problem and choose randomly from the
         # possible solutions.
-        if self.check_constraints and (is_range or is_list_or_tuple) and \
+        # Don't perform this optimization if we have impure constraints,
+        # because the optimization then means we won't respect changes to other variables.
+        if self.check_constraints and not self.has_impure_constraints and \
+            (is_range or is_list_or_tuple) and \
             self.get_domain_size_raw() < self.max_domain_size:
             problem = constraint.Problem()
             problem.addVariable(self.name, self.domain)
@@ -249,6 +256,8 @@ class RandVar:
 
         :param constr: Constraint to add.
         '''
+        if not utils.is_pure(constr):
+            self.has_impure_constraints = True
         length = self.get_length()
         if length is not None:
             # Treat all additional constraints as list constraints,
