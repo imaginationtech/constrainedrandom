@@ -916,6 +916,36 @@ We can use normal Python inheritance to override constraints in child classes. U
 This works because the parent constructor will use the overridden ``value_c`` when adding as a constraint it in its constructor. It has to have the same arguments as the parent ``value_c`` in order to work correctly.
 
 
+Pure vs non-pure constraints
+____________________________
+
+A *pure function* is one whose result only depends on its inputs and has no side effects.
+
+In ``constrainedrandom``, we define a *pure constraint* as one whose result only depends on its inputs, which are random variables that are defined as part of the randomization problem.
+
+E.g. the following is a pure constraint:
+
+.. code-block:: python
+
+    def not_zero(x):
+        return x != 0
+
+A *non-pure constraint* depends on something other than its random variable inputs to produce a result.
+
+E.g. the following is a non-pure constraint because it refers to an external (in this case, global) variable:
+
+.. code-block:: python
+
+    banned_values = [1, 3, 7, 8]
+
+    def not_banned(x):
+        return not (x in banned_values)
+
+Both pure and non-pure constraints are supported by ``constrainedrandom``. Pure constraints are optimized better by ``constrainedrandom`` than non-pure constraints, becuase we can take advantage of the fact that only variables under control by the randomization problem affect the result of the constraint. The user is encouraged to stick to pure constraints where possible for best performance.
+
+Class-based constraints are always assumed to be non-pure, as they always accept a reference to the class instance as the first argument, which is not a random variable itself. So using these rather than pure constraints added procedurally may harm performance slightly. Although it may well be worth the cost in order to organize the code in a more object-oriented manner.
+
+
 ``pre_randomize`` and ``post-randomize``
 ----------------------------------------
 
