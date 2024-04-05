@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2023 Imagination Technologies Ltd. All Rights Reserved
 
+import random
 from collections import defaultdict
-from typing import Any, Dict, Iterable, List, Optional, TYPE_CHECKING, Union
+from typing import Any, Callable, Dict, Iterable, List, Optional, TYPE_CHECKING, Union
 
 from .vargroup import VarGroup
 
@@ -10,7 +11,6 @@ from .. import utils
 from ..debug import RandomizationDebugInfo
 
 if TYPE_CHECKING:
-    from ..randobj import RandObj
     from ..internal.randvar import RandVar
 
 
@@ -20,7 +20,7 @@ class MultiVarProblem:
     Represents one problem concerning multiple random variables,
     where those variables all share dependencies on one another.
 
-    :param parent: The :class:`RandObj` instance that owns this instance.
+    :param random_getter: A callable returning the random instance to use within this instance.
     :param vars: The dictionary of names and :class:`RandVar` instances this problem consists of.
     :param constraints: An iterable of tuples of (constraint, (variables,...)) denoting
         the constraints and the variables they apply to.
@@ -35,20 +35,21 @@ class MultiVarProblem:
 
     def __init__(
         self,
-        parent: 'RandObj',
+        *,
+        random_getter: Callable[[], random.Random],
         vars: List['RandVar'],
         constraints: Iterable[utils.ConstraintAndVars],
         max_iterations: int,
         max_domain_size: int,
     ) -> None:
-        self.parent = parent
+        self.random_getter = random_getter
         self.vars = vars
         self.constraints = constraints
         self.max_iterations = max_iterations
         self.max_domain_size = max_domain_size
-        self.order = None
+        self.order: Optional[List[List['RandVar']]] = None
         self.debug = False
-        self.debug_info = None
+        self.debug_info: Optional[RandomizationDebugInfo] = None
 
     def determine_order(self, with_values: Dict[str, Any]) -> List[List['RandVar']]:
         '''
@@ -149,7 +150,7 @@ class MultiVarProblem:
         # For each group, construct a problem and solve it.
         for group in groups:
             group_solutions = None
-            group_problem = None
+            group_problem: VarGroup = None
             attempts = 0
             while group_solutions is None or len(group_solutions) == 0:
                 # Early loop exit cases
@@ -169,7 +170,7 @@ class MultiVarProblem:
                         if solutions_per_group >= len(solutions):
                             solution_subset = list(solutions)
                         else:
-                            solution_subset = self.parent._get_random().choices(
+                            solution_subset = self.random_getter().choices(
                                 solutions,
                                 k=solutions_per_group
                             )
@@ -209,11 +210,11 @@ class MultiVarProblem:
             if solutions_per_group == 1:
                 # This means we have exactly one solution for the variables considered so far,
                 # meaning we don't need to re-apply solved constraints for future groups.
-                constraints = group_problem.skipped_constraints
+                constraints = group_problem.get_remaining_constraints()
             solved_vars += group_problem.group_vars
             solutions = group_solutions
 
-        return self.parent._get_random().choice(solutions)
+        return self.random_getter().choice(solutions)
 
     def solve(
         self,

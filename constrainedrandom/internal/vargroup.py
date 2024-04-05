@@ -31,10 +31,6 @@ class VarGroup:
         size, we don't use the ``constraint`` package, but just use ``random`` instead.
     :param debug: ``True`` to run in debug mode. Slower, but collects
         all debug info along the way and not just the final failure.
-    :return: A tuple of 1) a list the names of the variables in the group,
-        2) a list of variables that must be randomized rather than solved
-        via a constraint problem,
-        3) a list of constraints and variables that won't be applied for this group.
     '''
 
     def __init__(
@@ -52,6 +48,7 @@ class VarGroup:
         self.problem = constraint.Problem()
         self.max_domain_size = max_domain_size
         self.debug = debug
+        self.remaining_constraints: List[utils.ConstraintAndVars] = []
 
         # Respect already-solved values when solving the constraint problem.
         for var_name, values in self.solution_space.items():
@@ -66,20 +63,13 @@ class VarGroup:
 
             # Consider whether this variable has random length.
             possible_lengths = None
-            if var.rand_length is not None:
+            if var.rand_length is not None and var.rand_length in self.solution_space:
                 # Variable has a random length.
                 # We guarantee that the random length variable will be solved
                 # before this one, if it is even part of the problem.
                 # If it's not in solution_space, we've already chosen the value
                 # for it and set the random length based on it.
-                if var.rand_length in self.solution_space:
-                    # Deal with potential values.
-                    possible_lengths = self.solution_space[var.rand_length]
-                    # Create a constraint that the length must be defined
-                    # by the other variable.
-                    len_constr = lambda listvar, length : len(listvar) == length
-                    self.problem.addConstraint(len_constr, (var.name, var.rand_length))
-                    self.raw_constraints.append((len_constr, (var.name, var.rand_length)))
+                possible_lengths = self.solution_space[var.rand_length]
 
             # Either add to constraint problem with full domain,
             # or treat it as a variable to be randomized.
@@ -107,7 +97,6 @@ class VarGroup:
                 self.rand_vars.append(var)
 
         # Add all pertinent constraints
-        self.skipped_constraints = []
         for (con, vars) in constraints:
             skip = False
             for var in vars:
@@ -116,7 +105,7 @@ class VarGroup:
                     skip = True
                     break
             if skip:
-                self.skipped_constraints.append((con, vars))
+                self.remaining_constraints.append((con, vars))
                 continue
             self.problem.addConstraint(con, vars)
             self.raw_constraints.append((con, vars))
@@ -143,6 +132,16 @@ class VarGroup:
         '''
         return len(self.rand_vars) > 0
 
+    def get_remaining_constraints(self) -> List[utils.ConstraintAndVars]:
+        '''
+        Call this to get the constraints that must
+        still be applied to other variables in future.
+
+        :return: A list of tuples, each tuple containing a
+            constraint and a tuple of its variables.
+        '''
+        return self.remaining_constraints
+
     def concretize_rand_length(
         self,
         rand_list_var: 'RandVar',
@@ -166,7 +165,7 @@ class VarGroup:
             if rand_list_var.rand_length in concrete_values:
                 rand_length_val = concrete_values[rand_list_var.rand_length]
             # Otherwise pick a value and save it.
-            if rand_list_var.rand_length in self.solution_space:
+            elif rand_list_var.rand_length in self.solution_space:
                 options = self.solution_space[rand_list_var.rand_length]
                 rand_length_val = rand_list_var._get_random().choice(options)
                 concrete_values[rand_list_var.rand_length] = rand_length_val
@@ -176,8 +175,8 @@ class VarGroup:
             else:
                 # If we haven't got a value for the random var
                 # in this problem, it must have already been set.
-                assert rand_list_var.rand_length_val is not None, \
-                    "Rand length must be concretized, but wasn't"
+                if rand_list_var.rand_length_val is None:
+                    raise RuntimeError(f"Internal error: Rand length must be concretized for variable {rand_list_var.name}, but wasn't")
 
     def solve(
         self,

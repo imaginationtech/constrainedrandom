@@ -59,6 +59,7 @@ class RandSizeListOrder(testutils.RandObjTestBase):
       - more than one list depending on the same random length
       - a small total state space
       - the lists are constrained based on one another and the random length
+      - the lists have a different order value from one another
       - a constraint that uses the random length to index the lists
       - fails with naive solver, or skips it
       - fails with sparsities == 1, or manually run with sparsities > 1
@@ -82,7 +83,7 @@ class RandSizeListOrder(testutils.RandObjTestBase):
                     return False
             return True
         r.add_constraint(var_not_in_list, ('length', 'list1', 'list2'))
-        r.set_solver_mode(naive=False, sparsities=[10])
+        r.set_solver_mode(naive=False, sparsities=[2])
         return r
 
     def check(self, results):
@@ -94,3 +95,5 @@ class RandSizeListOrder(testutils.RandObjTestBase):
             self.assertEqual(len(list2), length, "list2 length was wrong")
             for x1, x2 in zip(list1, list2):
                 self.assertFalse(x1 == x2)
+                self.assertIn(x1, range(-10, 11))
+                self.assertIn(x2, range(-10, 11))
