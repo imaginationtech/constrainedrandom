@@ -218,6 +218,7 @@ class MultiVarProblem:
     def solve(
         self,
         sparse: bool,
+        sparsities: List[int],
         thorough: bool,
         with_values: Optional[Dict[str, Any]]=None,
         debug: bool=False,
@@ -243,7 +244,6 @@ class MultiVarProblem:
 
         # Try to solve sparsely first
         if sparse:
-            sparsities = [1, 10, 100, 1000]
             # The worst-case value of the number of iterations for one sparsity level is:
             # iterations_per_sparsity * iterations_per_attempt
             # because of the call to solve_groups hitting iterations_per_attempt.

@@ -68,6 +68,7 @@ class RandObj:
         self._max_domain_size = max_domain_size
         self._naive_solve = True
         self._sparse_solve = True
+        self._sparsities = [1, 10, 100, 1000]
         self._thorough_solve = True
         self._problem_changed = False
 
@@ -84,9 +85,12 @@ class RandObj:
             return random
         return self._random
 
-    def set_solver_mode(self,
+    def set_solver_mode(
+        self,
+        *,
         naive: Optional[bool]=None,
         sparse: Optional[bool]=None,
+        sparsities: Optional[List[int]]=None,
         thorough: Optional[bool]=None,
     ) -> None:
         '''
@@ -112,6 +116,9 @@ class RandObj:
         :param sparse: ``True`` if sparse solver should be used,
             ``False`` otherwise. Setting not changed if argument
             not provided.
+        :param sparsities: A list specifying the number of solutions
+            to keep when solving each generation of the problem
+            sparsely. Setting not changed if argument not provided.
         :param thorough: ``True`` if thorough solver should be used,
             ``False`` otherwise. Setting not changed if argument
             not provided.
@@ -121,6 +128,8 @@ class RandObj:
             self._naive_solve = naive
         if sparse is not None:
             self._sparse_solve = sparse
+        if sparsities is not None:
+            self._sparsities = sparsities
         if thorough is not None:
             self._thorough_solve = thorough
 
@@ -256,7 +265,7 @@ class RandObj:
 
     def add_constraint(self, constr: utils.Constraint, variables: Iterable[str]):
         '''
-        Add an aribtrary constraint that applies to one or more variable(s).
+        Add an arbitrary constraint that applies to one or more variable(s).
 
         :param constr: A function (or callable) that accepts the random variables listed in
             ``variables`` as argument(s) and returns either ``True`` or ``False``.
@@ -480,6 +489,7 @@ class RandObj:
             result.update(
                 multi_var_problem.solve(
                     sparse=self._sparse_solve,
+                    sparsities=self._sparsities,
                     thorough=self._thorough_solve,
                     with_values=with_values,
                     debug=debug,
