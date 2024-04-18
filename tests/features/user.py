@@ -14,6 +14,7 @@ to ensure it doesn't regress in future.
 import unittest
 
 from constrainedrandom import RandObj
+from .. import testutils
 
 
 class NonPureFunction(unittest.TestCase):
@@ -48,3 +49,48 @@ class NonPureFunction(unittest.TestCase):
         # after c.var is assigned.
         c.var = 5
         r.randomize()
+
+
+class RandSizeListOrder(testutils.RandObjTestBase):
+    '''
+    Minimal test that hits a specific corner case involving
+    random list length.
+    The case requires:
+      - more than one list depending on the same random length
+      - a small total state space
+      - the lists are constrained based on one another and the random length
+      - a constraint that uses the random length to index the lists
+      - fails with naive solver, or skips it
+      - fails with sparsities == 1, or manually run with sparsities > 1
+    The symptom seen was IndexError: list index out of range
+    when applying the constraint.
+    '''
+
+    ITERATIONS = 100
+
+    def get_randobj(self, *args):
+        r = RandObj(*args)
+        r.add_rand_var('length', domain=range(1,3), order=0)
+        r.add_rand_var('list1', domain=range(-10,11), rand_length='length', order=1)
+        r.add_rand_var('list2', domain=range(-10,11), rand_length='length', order=2)
+
+        def var_not_in_list(length, list1, list2):
+            # Use length as an index, as this is how the bug
+            # was found in the wild.
+            for i in range(length):
+                if list1[i] == list2[i]:
+                    return False
+            return True
+        r.add_constraint(var_not_in_list, ('length', 'list1', 'list2'))
+        r.set_solver_mode(naive=False, sparsities=[10])
+        return r
+
+    def check(self, results):
+        for result in results:
+            length = result['length']
+            list1 = result['list1']
+            list2 = result['list2']
+            self.assertEqual(len(list1), length, "list1 length was wrong")
+            self.assertEqual(len(list2), length, "list2 length was wrong")
+            for x1, x2 in zip(list1, list2):
+                self.assertFalse(x1 == x2)
