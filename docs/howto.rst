@@ -44,9 +44,10 @@ Here is the same example implemented by inheriting from the class:
             super().__init__()
             self.add_rand_var("a", domain=range(10))
             self.add_rand_var("b", domain=range(10))
-            def sum_gt_5(a, b):
-                return a + b > 5
-            self.add_constraint(sum_gt_5, ('a', 'b'))
+            self.add_constraint(self.sum_gt_5, ('a', 'b'))
+
+        def sum_gt_5(self, a, b):
+            return a + b > 5
 
     randobj = SumGTFive()
     randobj.randomize()
