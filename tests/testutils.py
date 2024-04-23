@@ -4,12 +4,13 @@
 ''' Reusable definitions for unit testing '''
 
 import random
-import timeit
 import unittest
+from collections import defaultdict
 from copy import deepcopy
-from typing import Any, Dict, List
+from time import process_time
+from typing import Any, Dict, List, Optional
 
-from constrainedrandom import RandObj, RandomizationError
+from constrainedrandom import RandObj
 
 
 def assertListOfDictsEqual(instance, list0, list1, msg) -> None:
@@ -35,6 +36,8 @@ class RandObjTestBase(unittest.TestCase):
     EXPECTED_ERROR_INIT = None
     # Expected exception when calling `randomize_and_check_result`.
     EXPECTED_ERROR_RAND = None
+    # Performance results
+    PERF_RESULTS = defaultdict(list)
 
     def setUp(self) -> None:
         self.iterations = self.ITERATIONS * self.TEST_LENGTH_MULTIPLIER
@@ -79,7 +82,13 @@ class RandObjTestBase(unittest.TestCase):
         '''
         pass
 
-    def randomize_and_time(self, randobj, iterations, tmp_constraints=None, tmp_values=None) -> List[Dict[str, Any]]:
+    def randomize_and_time(
+        self,
+        randobj: RandObj,
+        iterations: int,
+        tmp_constraints: Optional[List[Any]]=None,
+        tmp_values: Optional[Dict[str, Any]]=None
+    ) -> List[Dict[str, Any]]:
         '''
         Call randobj.randomize() iterations times, time it, print performance stats,
         return the results.
@@ -87,30 +96,32 @@ class RandObjTestBase(unittest.TestCase):
         results = []
         time_taken = 0
         for _ in range(iterations):
-            start_time = timeit.default_timer()
+            start_time = process_time()
             if tmp_constraints is not None or tmp_values is not None:
                 randobj.randomize(with_constraints=tmp_constraints, with_values=tmp_values)
             else:
                 randobj.randomize()
-            end_time = timeit.default_timer()
+            end_time = process_time()
             time_taken += end_time - start_time
             # Extract the results
             results.append(randobj.get_results())
         hz = iterations/time_taken
         print(f'{self.get_full_test_name()} took {time_taken:.4g}s for {iterations} iterations ({hz:.1f}Hz)')
+        perf_results = {'time_taken': time_taken, 'iterations': iterations, 'hz': hz}
+        self.__class__.PERF_RESULTS[self.__class__.__name__].append(perf_results)
         return results
 
     def randomize_and_check_result(
         self,
-        randobj,
-        expected_results,
-        do_tmp_checks,
-        tmp_constraints,
-        tmp_values,
-        expected_tmp_results,
-        expected_post_tmp_results,
-        expected_add_results,
-        add_tmp_constraints,
+        randobj: RandObj,
+        expected_results: List[Dict[str, Any]],
+        do_tmp_checks: bool,
+        tmp_constraints: Optional[List[Any]],
+        tmp_values: Optional[Dict[str, Any]],
+        expected_tmp_results: Optional[List[Dict[str, Any]]],
+        expected_post_tmp_results: Optional[List[Dict[str, Any]]],
+        expected_add_results: Optional[List[Dict[str, Any]]],
+        add_tmp_constraints: bool,
     ) -> None:
         '''
         Code to randomize a randobj and check its results against expected
