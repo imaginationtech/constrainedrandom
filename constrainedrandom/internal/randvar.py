@@ -2,6 +2,7 @@
 # Copyright (c) 2023 Imagination Technologies Ltd. All Rights Reserved
 
 import constraint
+from enum import auto, Enum
 from functools import partial
 from itertools import product
 from typing import Any, Callable, Iterable, List, Optional
@@ -109,14 +110,40 @@ class RandVar:
             if args is not None:
                 raise RuntimeError("'args' has no effect without 'fn', but was provided without 'fn'")
         self.domain = domain
+        # Handle possible types of domain.
+        self.domain_is_range = isinstance(self.domain, range)
+        self.domain_is_list_or_tuple = isinstance(self.domain, list) or isinstance(self.domain, tuple)
+        self.domain_is_dict = isinstance(self.domain, dict)
+        # Range, list and tuple are handled nicely by the constraint package.
+        # Other Iterables may not be, e.g. enum.Enum isn't, despite being an Iterable.
+        self.domain_is_iterable = isinstance(self.domain, Iterable)
+        if self.domain_is_iterable and not \
+            (self.domain_is_range or self.domain_is_list_or_tuple or self.domain_is_dict):
+            # Convert non-dict iterables to a tuple,
+            # as we don't expect them to need to be mutable,
+            # and tuple ought to be slightly more performant than list.
+            try:
+                self.domain = tuple(self.domain)
+            except TypeError:
+                raise TypeError(
+                    f'RandVar was passed a domain of bad type - {self.domain}. '   
+                    'This was an Iterable but could not be converted to tuple.'
+                )
+            self.domain_is_list_or_tuple = True
         self.bits = bits
+        if self.bits is not None:
+            # Convert this to a range-based domain, as we might be
+            # able to use _randomize_solution_choice.
+            # The maximum size of range that Python can handle (in CPython)
+            # when using size_tis 62 bits, as it uses signed 64-bit integers
+            # and the top of the range is expressed as 1 << bits, i.e.
+            # requiring one extra bit to store.
+            if self.bits <= 62:
+                self.domain = range(0, 1 << self.bits)
+                self.domain_is_range = True
         self.fn = fn
         self.args = args
         self.constraints = constraints if constraints is not None else []
-        self.has_impure_constraints = False
-        for constr in self.constraints:
-            if not utils.is_pure(constr):
-                self.has_impure_constraints = True
         if not (isinstance(self.constraints, list) or isinstance(self.constraints, tuple)):
             raise TypeError("constraints was bad type, should be list or tuple")
         if not isinstance(self.constraints, list):
@@ -126,129 +153,114 @@ class RandVar:
             raise TypeError("list_constraints was bad type, should be list or tuple")
         if not isinstance(self.list_constraints, list):
             self.list_constraints = list(self.list_constraints)
-        # Default strategy is to randomize and check the constraints.
-        # List constraints are always checked.
-        self.check_constraints = len(self.constraints) > 0
-        self.randomizer = self.create_randomizer()
+        self.has_impure_constraints = False
+        for constr in self.constraints:
+            if not utils.is_pure(constr):
+                self.has_impure_constraints = True
+        self.solution_cache: Optional[List[Any]] = None
+        self.randomizer: Callable = self.get_randomizer()
         self.disable_naive_list_solver = disable_naive_list_solver
 
-    def create_randomizer(self) -> Callable:
+    def get_randomizer(self) -> Callable:
         '''
-        Creates a randomizer function that returns an appropriate
-        random value for a single instance of the variable, i.e. a single
-        element of a list or a simple scalar variable.
-        We do this to create a more optimal randomizer than the user might
-        have specified that is functionally equivalent.
+        Selects which randomizer function to use.
+        Each randomizer function returns an appropriate
+        random value for a single instance of the variable,
+        i.e. a single element of a list or a simple scalar variable.
 
-        We always return a ``partial`` because these work with
-        ``copy.deepcopy``, whereas locally-defined functions and
-        lambdas can only ever have one instance.
-
-        :return: a function as described.
+        :return: The randomizer function to use.
         :raises TypeError: if the domain is of a bad type.
         '''
         # self.fn, self.bits and self.domain should already be guaranteed
         # to be mutually exclusive - only one should be non-None.
         if self.fn is not None:
-            if self.args is not None:
-                return partial(self.fn, *self.args)
-            else:
-                return self.fn
+            return self._randomize_user_fn
         if self.bits is not None:
-            # Convert this to a range-based domain.
-            self.domain = range(0, 1 << self.bits)
             # If sufficiently small, let this fall through to the general case,
             # to optimize randomization w.r.t. constraints.
             # The maximum size of range that Python can handle (in CPython)
             # when using size_tis 62 bits, as it uses signed 64-bit integers
             # and the top of the range is expressed as 1 << bits, i.e.
             # requiring one extra bit to store.
-            if self.bits >= 63:
-                # Ideally here we would use:
-                # return partial(self._get_random().getrandbits, self.bits)
-                # as it seems that getrandbits is 10x faster than randrange.
-                # However, there is a very strange interaction between deepcopy
-                # and random that prevents this. See get_and_call for details.
-                # This solution is still faster than a partial with randrange.
-                return partial(get_and_call, self._get_random, 'getrandbits', self.bits)
-        # Handle possible types of domain.
-        is_range = isinstance(self.domain, range)
-        is_list_or_tuple = isinstance(self.domain, list) or isinstance(self.domain, tuple)
-        is_dict = isinstance(self.domain, dict)
-        # Range, list and tuple are handled nicely by the constraint package.
-        # Other Iterables may not be, e.g. enum.Enum isn't, despite being an Iterable.
-        is_iterable = isinstance(self.domain, Iterable)
-        if is_iterable and not (is_range or is_list_or_tuple or is_dict):
-            # Convert non-dict iterables to a tuple as we don't expect them to need to be mutable,
-            # and tuple ought to be slightly more performant than list.
-            try:
-                self.domain = tuple(self.domain)
-            except TypeError:
-                raise TypeError(f'RandVar was passed a domain of bad type - {self.domain}. '
-                                'This was an Iterable but could not be converted to tuple.')
-            is_list_or_tuple = True
-
-        # If we are provided a sufficiently small domain and we have constraints,
-        # simply construct a constraint solution problem and choose randomly from the
-        # possible solutions.
-        # Don't perform this optimization if we have impure constraints,
-        # because the optimization then means we won't respect changes to other variables.
-        if self.check_constraints and not self.has_impure_constraints and \
-            (is_range or is_list_or_tuple) and \
-            self.get_domain_size_raw() < self.max_domain_size:
-            problem = constraint.Problem()
-            problem.addVariable(self.name, self.domain)
-            for con in self.constraints:
-                problem.addConstraint(con, (self.name,))
-
-            # This call to getSolutions may fail, as we are running it sooner
-            # than the user knows. The user expects the constraint only to be
-            # called during randomization, but this function will be called
-            # when adding new constraints.
-            # Allow for it failing, and move on to the other ways to generate
-            # a randomizer if it does.
-            try:
-                solutions = problem.getSolutions()
-            except:
-                solutions = None
-
-            if solutions is not None:
-                # If we can't get any solutions, it's an intractable problem.
-                if len(solutions) == 0:
-                    debug_fail = RandomizationFail([self.name],
-                        [(c, (self.name,)) for c in self.constraints])
-                    debug_info = RandomizationDebugInfo()
-                    debug_info.add_failure(debug_fail)
-                    raise utils.RandomizationError("Variable was unsolvable. Check constraints.", debug_info)
-                # getSolutions produces a list of dictionaries - index it
-                # up front for very marginal performance gains
-                solution_list = [s[self.name] for s in solutions]
-                self.check_constraints = False
-                return partial(self._get_random().choice, solution_list)
-
-        # Fall through to a standard randomizer which randomizes and checks.
-        if self.bits is not None:
-            # Ideally here we would use:
-            # return partial(self._get_random().getrandbits, self.bits)
-            # as it seems that getrandbits is 10x faster than randrange.
-            # However, there is a very strange interaction between deepcopy
-            # and random that prevents this. See get_and_call for details.
-            # This solution is still faster than a partial with randrange.
-            return partial(get_and_call, self._get_random, 'getrandbits', self.bits)
-        elif is_range:
-            return partial(self._get_random().randrange, self.domain.start, self.domain.stop)
-        elif is_list_or_tuple:
-            return partial(self._get_random().choice, self.domain)
-        elif is_dict:
-            rand = self._get_random()
-            if rand is random:
-                # Don't store a module in a partial as this can't be copied.
-                # dist defaults to using the global random module.
-                return partial(dist, self.domain)
-            return partial(dist, self.domain, rand)
+            return self._randomize_bits
+        elif self.domain_is_range:
+            return self._randomize_range
+        elif self.domain_is_list_or_tuple:
+            return self._randomize_choice
+        elif self.domain_is_dict:
+            return self._randomize_dist
         else:
             raise TypeError(f'RandVar was passed a domain of a bad type - {self.domain}. '
                             'Domain should be a range, list, tuple, dictionary or other Iterable.')
+
+    def _randomize_user_fn(self) -> Any:
+        if self.args is not None:
+            return self.fn(*self.args)
+        else:
+            return self.fn()
+
+    def _randomize_bits(self) -> int:
+        return self._get_random().getrandbits(self.bits)
+
+    def _randomize_choice(self) -> Any:
+        return self._get_random().choice(self.domain)
+
+    def _randomize_range(self) -> int:
+        return self._get_random().randrange(self.domain.start, self.domain.stop)
+
+    def _randomize_dist(self) -> Any:
+        return dist(self.domain, self._get_random())
+
+    def _randomize_csp(
+        self,
+        constraints: Iterable[utils.Constraint],
+        using_temp_constraints: bool
+    ) -> Any:
+        # Don't use cached solution_list if we have impure constraints,
+        # because the optimization means we won't respect changes
+        # to external variables.
+        domain = self.domain
+        solution_cache_valid =  (
+            not self.has_impure_constraints and
+            self.solution_cache is not None
+        )
+        if solution_cache_valid:
+            if using_temp_constraints:
+                domain = self.solution_cache
+            else:
+                return self._get_random().choice(self.solution_cache)
+        problem = constraint.Problem()
+        problem.addVariable(self.name, domain)
+        for con in constraints:
+            problem.addConstraint(con, (self.name,))
+        solutions = problem.getSolutions()
+        # If we can't get any solutions, it's an intractable problem.
+        if len(solutions) == 0:
+            debug_fail = RandomizationFail([self.name],
+                [(c, (self.name,)) for c in constraints])
+            debug_info = RandomizationDebugInfo()
+            debug_info.add_failure(debug_fail)
+            raise utils.RandomizationError(
+                f"Variable '{self.name}' was unsolvable. Check constraints.", debug_info
+            )
+        if not self.has_impure_constraints and not using_temp_constraints:
+            # getSolutions produces a list of dictionaries - index it
+            # before caching for marginal performance gains.
+            solution_list = [s[self.name] for s in solutions]
+            self.solution_cache = solution_list
+            return self._get_random().choice(solution_list)
+        else:
+            return self._get_random().choice(solutions)[self.name]
+
+    def can_use_randomize_csp(self) -> bool:
+        # If we are provided a sufficiently small domain and we have constraints,
+        # simply construct a constraint solution problem and choose randomly from the
+        # possible solutions.
+        return (
+            len(self.constraints) > 0 and
+            (self.domain_is_range or self.domain_is_list_or_tuple) and
+            self.get_domain_size_raw() < self.max_domain_size
+        )
 
     def add_constraint(self, constr: utils.Constraint) -> None:
         '''
@@ -264,11 +276,10 @@ class RandVar:
             # although this is a little less performant.
             self.list_constraints.append(constr)
         else:
-            # For adding scalar constraints, reevalute whether we can
-            # still use a CSP - recreate the randomizer.
+            # For adding scalar constraints, invalidate the solution
+            # cache.
             self.constraints.append(constr)
-            self.check_constraints = True
-            self.randomizer = self.create_randomizer()
+            self.solution_cache = None
 
     def get_length(self) -> int:
         '''
@@ -386,7 +397,7 @@ class RandVar:
         '''
         Check whether this random variable can be used in a
         ``constraint.Problem`` or not.
-        Note this isn't depenedent on the domain size, just
+        Note this isn't dependent on the domain size, just
         purely whether it will work.
 
         :return: bool, True if it can be used with ``constraint.Problem``.
@@ -432,20 +443,26 @@ class RandVar:
                 result += [list(x) for x in product(self.domain, repeat=poss_len)]
             return result
 
-    def randomize_once(self, constraints: Iterable[utils.Constraint], check_constraints: bool, debug: bool) -> Any:
+    def randomize_once(
+        self,
+        constraints: Iterable[utils.Constraint],
+        using_temp_constraints: bool,
+        debug: bool,
+    ) -> Any:
         '''
         Get one random value that satisfies the constraints.
 
         :param constraints: The constraints that apply to this randomization.
-        :param check_constraints: Whether constraints need to be checked.
         :param debug: ``True`` to run in debug mode. Slower, but collects
             all debug info along the way and not just the final failure.
         :return: A random value for the variable, respecting the constraints.
         :raises RandomizationError: When the problem cannot be solved in fewer than
             the allowed number of iterations.
         '''
+        if self.can_use_randomize_csp():
+            return self._randomize_csp(constraints, using_temp_constraints)
         value = self.randomizer()
-        if not check_constraints:
+        if len(constraints) == 0:
             return value
         value_valid = False
         iterations = 0
@@ -482,7 +499,7 @@ class RandVar:
         list_constraints: Iterable[utils.Constraint],
     ):
         '''
-        Use a CSP to get a full set of soltuons for the random list,
+        Use a CSP to get a full set of solutions for the random list,
         fulfilling the constraints. Selects and returns one randomization.
         Should only be used when the domain is suitably small.
 
@@ -514,7 +531,7 @@ class RandVar:
     def randomize_list_naive(
         self,
         constraints: Iterable[utils.Constraint],
-        check_constraints: bool,
+        using_temp_constraints: bool,
         list_constraints: Iterable[utils.Constraint],
         debug: bool,
         debug_fail: Optional[RandomizationFail],
@@ -527,7 +544,8 @@ class RandVar:
         :param constraints: The constraints that apply to this randomization.
             These are scalar constraints, i.e. on each individual element of
             the list.
-        :param check_constraints: Whether constraints need to be checked.
+        :param using_temp_constraints: Whether temporary constraints appear in
+            the list of constraints, or not.
         :param list_constraints: The constraints that apply to the entire list.
         :param debug: ``True`` to run in debug mode. Slower, but collects
             all debug info along the way and not just the final failure.
@@ -538,7 +556,7 @@ class RandVar:
             the constraints.
         '''
         length = self.get_length()
-        values = [self.randomize_once(constraints, check_constraints, debug) \
+        values = [self.randomize_once(constraints, using_temp_constraints, debug) \
             for _ in range(length)]
         values_valid = len(list_constraints) == 0
         iterations = 0
@@ -557,14 +575,14 @@ class RandVar:
                     # Capture all failing values as we go
                     debug_fail.add_values(iterations, {self.name: values})
                 iterations += 1
-                values = [self.randomize_once(constraints, check_constraints, debug) \
+                values = [self.randomize_once(constraints, using_temp_constraints, debug) \
                     for _ in range(length)]
         return values
 
     def randomize_list_subset(
         self,
         constraints: Iterable[utils.Constraint],
-        check_constraints: bool,
+        using_temp_constraints: bool,
         list_constraints: Iterable[utils.Constraint],
         debug : bool,
         debug_fail: Optional[RandomizationFail],
@@ -577,7 +595,8 @@ class RandVar:
         :param constraints: The constraints that apply to this randomization.
             These are scalar constraints, i.e. on each individual element of
             the list.
-        :param check_constraints: Whether constraints need to be checked.
+        :param using_temp_constraints: Whether temporary constraints appear in
+            the list of constraints, or not.
         :param list_constraints: The constraints that apply to the entire list.
         :param debug: ``True`` to run in debug mode. Slower, but collects
             all debug info along the way and not just the final failure.
@@ -589,7 +608,7 @@ class RandVar:
             the allowed number of iterations.
         '''
         length = self.get_length()
-        values = [self.randomize_once(constraints, check_constraints, debug) \
+        values = [self.randomize_once(constraints, using_temp_constraints, debug) \
             for _ in range(length)]
         values_valid = len(list_constraints) == 0
         iterations = 0
@@ -630,7 +649,7 @@ class RandVar:
                     # Check the entire list to ensure maximum
                     # degrees of freedom.
                     checked = tmp_values
-            values = checked + [self.randomize_once(constraints, check_constraints, debug) \
+            values = checked + [self.randomize_once(constraints, using_temp_constraints, debug) \
                 for _ in range(length - len(checked))]
             problem = constraint.Problem()
             problem.addVariable(self.name, (values,))
@@ -658,7 +677,8 @@ class RandVar:
         :raises RandomizationError: When the problem cannot be solved in fewer than
             the allowed number of iterations.
         '''
-        check_constraints = self.check_constraints
+        # Default strategy is to randomize and check the constraints.
+        # List constraints are always checked.
         # Handle temporary constraints. Start with copy of existing constraints,
         # adding any temporary ones in.
         constraints = list(self.constraints)
@@ -667,9 +687,8 @@ class RandVar:
         if length is None:
             # Interpret temporary constraints as scalar constraints
             if using_temp_constraints:
-                check_constraints = True
                 constraints += temp_constraints
-            return self.randomize_once(constraints, check_constraints, debug)
+            return self.randomize_once(constraints, using_temp_constraints, debug)
         else:
             list_constraints = list(self.list_constraints)
             # Interpret temporary constraints as list constraints
@@ -700,7 +719,7 @@ class RandVar:
                 # naive mode disabled.
                 if not self.disable_naive_list_solver:
                     values = self.randomize_list_naive(constraints, \
-                        check_constraints, list_constraints, debug, debug_fail)
+                        using_temp_constraints, list_constraints, debug, debug_fail)
                     if values is not None:
                         return values
                 # If the above fails, use a slightly smarter algorithm,
@@ -708,4 +727,4 @@ class RandVar:
                 # might also restrict value selection.
                 # No fallback if this fails.
                 return self.randomize_list_subset(constraints, \
-                    check_constraints, list_constraints, debug, debug_fail)
+                    using_temp_constraints, list_constraints, debug, debug_fail)
