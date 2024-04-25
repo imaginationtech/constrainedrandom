@@ -45,19 +45,14 @@ class ImpossibleOneVar(testutils.RandObjTestBase):
     Test an impossible constraint problem with one variable.
     '''
 
+    EXPECTED_ERROR_RAND = RandomizationError
+
     def get_randobj(self, *args):
         randobj = RandObj(*args)
         def eq_zero(x):
             return x == 0
         randobj.add_rand_var('a', domain=[1,], constraints=[eq_zero,])
         return randobj
-
-    def test_randobj(self):
-        # Override the whole test function, because unsolvable
-        # simple single variables fail on creation, rather
-        # than when randomize is called.
-        self.assertRaises(RandomizationError, self.get_randobj, 0)
-        self.assertRaises(RandomizationError, self.get_randobj, 1)
 
 
 class ImpossibleComplexVar(testutils.RandObjTestBase):
