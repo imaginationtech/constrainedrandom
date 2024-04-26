@@ -337,7 +337,7 @@ class RandObj:
                         for list_var in self._rand_list_lengths[var]:
                             self._constrained_vars.add(list_var)
         else:
-            raise TypeError(f"{variables=} must be of type str, tuple or list")
+            raise TypeError(f"'variables' must be of type str, tuple or list, got {variables}")
         self._problem_changed = True
 
     def pre_randomize(self) -> None:

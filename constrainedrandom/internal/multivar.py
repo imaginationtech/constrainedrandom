@@ -7,8 +7,8 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, TYPE_CHECKING,
 
 from .vargroup import VarGroup
 
+from .. import debug
 from .. import utils
-from ..debug import RandomizationDebugInfo
 
 if TYPE_CHECKING:
     from ..internal.randvar import RandVar
@@ -48,8 +48,7 @@ class MultiVarProblem:
         self.max_iterations = max_iterations
         self.max_domain_size = max_domain_size
         self.order: Optional[List[List['RandVar']]] = None
-        self.debug = False
-        self.debug_info: Optional[RandomizationDebugInfo] = None
+        self.debug_info = Optional[debug.RandomizationDebugInfo]
 
     def determine_order(self, with_values: Dict[str, Any]) -> List[List['RandVar']]:
         '''
@@ -110,6 +109,7 @@ class MultiVarProblem:
         with_values: Dict[str, Any],
         max_iterations: int,
         solutions_per_group: Optional[int]=None,
+        debug: bool=False,
     ) -> Union[Dict[str, Any], None]:
         '''
         Constraint solving algorithm. (Used internally by :class:`MultiVarProblem`)
@@ -132,6 +132,8 @@ class MultiVarProblem:
             If ``solutions_per_group`` is ``None``, Solve constraint problem 'thoroughly',
             i.e. keep all possible results between iterations.
             Slow, but will usually converge.
+        :param debug: ``True`` to run in debug mode. Slower, but collects
+            all debug info along the way and not just the final failure.
         :returns: A valid solution to the problem, in the form of a dictionary with the
             names of the random variables as keys and the valid solution as the values.
             Returns ``None`` if no solution is found within the allotted ``max_iterations``.
@@ -155,10 +157,14 @@ class MultiVarProblem:
             while group_solutions is None or len(group_solutions) == 0:
                 # Early loop exit cases
                 if attempts >= max_iterations:
-                    # We have failed, give up
+                    # We have failed, give up.
+                    # Update with latest debug info.
+                    self.debug_info = group_problem.debug_info
                     return None
                 if attempts > 0 and not group_problem.can_retry():
                     # Not worth retrying - the same result will be obtained.
+                    # Update with latest debug info.
+                    self.debug_info = group_problem.debug_info
                     return None
 
                 # Determine what the starting state space for this group
@@ -195,14 +201,13 @@ class MultiVarProblem:
                     solution_space,
                     constraints,
                     self.max_domain_size,
-                    self.debug,
                 )
 
                 # Attempt to solve the group
                 group_solutions = group_problem.solve(
                     max_iterations,
                     solutions_per_group,
-                    self.debug_info,
+                    debug,
                 )
                 attempts += 1
 
@@ -239,9 +244,6 @@ class MultiVarProblem:
         with_values = {} if with_values is None else with_values
         groups = self.determine_order(with_values)
         solution = None
-        # Create debug info in case of failure
-        self.debug_info = RandomizationDebugInfo()
-        self.debug = debug
 
         # Try to solve sparsely first
         if sparse:
@@ -261,18 +263,23 @@ class MultiVarProblem:
                         with_values=with_values,
                         max_iterations=iterations_per_attempt,
                         solutions_per_group=sparsity,
+                        debug=debug,
                     )
                     if solution is not None and len(solution) > 0:
                         return solution
 
         if thorough:
-            # Try 'thorough' method - no backup plan if this fails
+            # Try 'thorough' method - no backup plan if this fails.
             solution = self.solve_groups(
                 groups=groups,
                 with_values=with_values,
                 max_iterations=self.max_iterations,
                 solutions_per_group=None,
+                debug=debug,
             )
         if solution is None:
-            raise utils.RandomizationError("Could not solve problem.", self.debug_info)
+            raise utils.RandomizationError(
+                "Could not solve multi-variable constraint problem.",
+                str(self.debug_info),
+            )
         return solution

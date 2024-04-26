@@ -29,8 +29,6 @@ class VarGroup:
     :param max_domain_size: The maximum size of domain that a constraint satisfaction problem
         may take. This is used to avoid poor performance. When a problem exceeds this domain
         size, we don't use the ``constraint`` package, but just use ``random`` instead.
-    :param debug: ``True`` to run in debug mode. Slower, but collects
-        all debug info along the way and not just the final failure.
     '''
 
     def __init__(
@@ -39,15 +37,14 @@ class VarGroup:
         solution_space: Dict[str, List[Any]],
         constraints: List[utils.ConstraintAndVars],
         max_domain_size: int,
-        debug: bool,
     ) -> None:
         self.solution_space = solution_space
-        self.group_vars: List[str] = []
+        self.group_vars: List['RandVar'] = group
+        self.group_var_names: List[str] = []
         self.rand_vars: List['RandVar'] = []
         self.raw_constraints: List[utils.ConstraintAndVars] = []
         self.problem = constraint.Problem()
         self.max_domain_size = max_domain_size
-        self.debug = debug
         self.remaining_constraints: List[utils.ConstraintAndVars] = []
 
         # Respect already-solved values when solving the constraint problem.
@@ -58,8 +55,8 @@ class VarGroup:
         # in order to be part of the problem. If it doesn't have one, it must just be
         # randomized. Also take care not to exceed tha maximum domain size for an
         # individual variable.
-        for var in group:
-            self.group_vars.append(var.name)
+        for var in self.group_vars:
+            self.group_var_names.append(var.name)
 
             # Consider whether this variable has random length.
             possible_lengths = None
@@ -100,7 +97,7 @@ class VarGroup:
         for (con, vars) in constraints:
             skip = False
             for var in vars:
-                if var not in self.group_vars and var not in solution_space:
+                if var not in self.group_var_names and var not in solution_space:
                     # Skip this constraint
                     skip = True
                     break
@@ -111,15 +108,11 @@ class VarGroup:
             self.raw_constraints.append((con, vars))
 
     @cached_property
-    def debug_fail(self) -> RandomizationFail:
+    def debug_info(self) -> RandomizationDebugInfo:
         '''
-        Cached property, instance of ``RandomizationFail`` that
-        corresponds to this problem.
+        Debug information. Cached so it gets created once.
         '''
-        failing_constraints = list(self.raw_constraints)
-        for var in self.rand_vars:
-            failing_constraints += [(constr, (var.name,)) for constr in var.constraints]
-        return RandomizationFail(list(self.group_vars), failing_constraints)
+        return RandomizationDebugInfo(self.group_vars, self.raw_constraints)
 
     def can_retry(self) -> bool:
         '''
@@ -182,7 +175,7 @@ class VarGroup:
         self,
         max_iterations: int,
         solutions_per_group: int,
-        debug_info: RandomizationDebugInfo,
+        debug: bool,
     ) -> Union[List[Dict[str, Any]], None]:
         '''
         Attempts to solve one group of variables. Preferentially uses a constraint
@@ -195,8 +188,8 @@ class VarGroup:
         :solutions_per_group: How many random values to produce before attempting
             to solve the constraint satisfaction problem. A lower value will run
             quicker but has less chance to succeed.
-        :param debug_info: :class:`RandomizationDebugInfo`` instance to collect
-            any debug info.
+        :param debug: ``True`` to run in debug mode. Slower, but collects
+            all debug info along the way and not just the final failure.
         :return: A list of all possible solutions for the group, or ``None`` if
             it can't be solved within ``max_iterations`` attempts.
         '''
@@ -207,7 +200,9 @@ class VarGroup:
             # If we have additional random variables, randomize and check
             while True:
                 # Reset concrete values on each attempt.
-                concrete_values : Dict[str, Any] = {}
+                concrete_values: Dict[str, Any] = {}
+                if debug:
+                    debug_values: Dict[str, Any] = {}
                 for var in self.rand_vars:
                     if var.name in self.problem._variables:
                         # Remove from problem, it will be re-added with different concrete values
@@ -223,32 +218,40 @@ class VarGroup:
                         var_domain = []
                         for _ in range(iterations):
                             val = var.randomize()
-                            # List is ~2x slower than set for 'in',
-                            # but variables might be non-hashable.
+                            # List 'in' is O(N), set's is O(1),
+                            # but variables might be non-hashable, which
+                            # means we can't use a set.
+                            # Repeating values in domain hurts performance more.
                             if val not in var_domain:
                                 var_domain.append(val)
                         self.problem.addVariable(var.name, var_domain)
+                        if debug:
+                            debug_values[var.name] = var_domain
                 solutions = self.problem.getSolutions()
                 if len(solutions) > 0:
                     break
                 else:
                     attempts += 1
-                    # Always output debug info on the last attempt.
                     failed = attempts >= max_iterations
-                    debug = self.debug or (solutions_per_group is None and failed)
                     if debug:
-                        self.debug_fail.add_values(attempts, dict(self.problem._variables))
+                        # Record failed values
+                        self.debug_info.add_failure(
+                            attempt=attempts,
+                            values=debug_values,
+                            other_variables=self.solution_space,
+                        )
                     if failed:
                         # We have failed, give up
-                        debug_info.add_failure(self.debug_fail)
                         return None
 
         else:
             # Otherwise, just get the solutions, no randomization required.
             solutions = self.problem.getSolutions()
             if len(solutions) == 0:
-                # Failed
-                debug_info.add_failure(self.debug_fail)
+                # Failed, add debug info
+                self.debug_info.add_failure(
+                    values={name: [] for name in self.group_var_names},
+                    other_variables=dict(self.solution_space))
                 return None
 
         return solutions

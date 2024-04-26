@@ -1,9 +1,12 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2023 Imagination Technologies Ltd. All Rights Reserved
 
-from typing import Any, Dict, Iterable, List
+from typing import Any, Dict, Iterable, List, Optional, TYPE_CHECKING
 
 from .utils import Constraint, ConstraintAndVars
+
+if TYPE_CHECKING:
+    from .internal.randvar import RandVar
 
 
 def debug_constraints(
@@ -34,74 +37,120 @@ class RandomizationFail:
     '''
     Represents one failure to randomize a problem.
 
-    :param variables: List of variables that were randomized.
+    Describes the values of the failed randomization.
+    These values did not satisfy one or more constraints.
+
+    :param attempt: Number of attempts up until this failure.
+    :param values: Dictionary where keys are names of variables,
+        values are the failed values.
     :param constraints: List of tuples, giving constraints that
         were applied and the variables they apply to.
     '''
 
-    def __init__(self, variables: Iterable[str], constraints: Iterable[ConstraintAndVars]) -> None:
-        self.variables = variables
-        self.constraints = constraints
-        self.values = []
+    def __init__(
+        self,
+        *,
+        attempt: Optional[int],
+        values: Dict[str, Any],
+        constraints: Iterable[ConstraintAndVars],
+        other_variables: Optional[Dict[str, Any]],
+    ) -> None:
+        self.attempt = attempt
+        self.values = values
+        self.other_variables = other_variables
         self.failing_constraints = []
-
-    def add_values(self, attempt: int, values: Dict[str, Any]) -> None:
-        '''
-        Adds values to the failed randomization. These values did
-        not satisfy one or more constraints.
-
-        :param attempt: Number of attempts up until this failure.
-        :param values: Dictionary where keys are names of variables,
-            values are the failed values.
-        '''
-        self.values.append((attempt, values))
         # Try to work out the constraints that are failing.
         # This may not be possible, depending on the problem we are being passed.
         try:
-            failing_constraints = debug_constraints(self.constraints, values)
-            self.failing_constraints.append(failing_constraints)
+            failing_constraints = debug_constraints(constraints, values)
+            self.failing_constraints += failing_constraints
         except Exception:
             self.failing_constraints.append('could not compute failing constraints')
 
     def __str__(self):
-        s = f"variables: {self.variables}"
-        s += f"\nconstraints: {self.constraints}"
-        if len(self.values) > 0:
-            s += f"\nvalues and failing constraints:"
-        for (attempt, value_dict), failing_constraints in zip(self.values, self.failing_constraints):
-            s += f"\n  attempt: {attempt}  values: {value_dict}"
-            s += f" failing constraints: {failing_constraints}"
+        s = "RandomizationFail("
+        if self.attempt is not None:
+            s += f"attempt={self.attempt}, "
+        s += f"values={self.values}, "
+        s += f"failing_constraints={self.failing_constraints}"
+        if self.other_variables is not None:
+            s += f", other_variables={self.other_variables}"
+        s += ")"
         return s
-
-    def __repr__(self) -> str:
-        return self.__str__()
 
 
 class RandomizationDebugInfo:
     '''
     Contains information about a failing randomization problem.
 
-    Returned as part of a ``RandomizationError``.
+    Returned as part of a ``RandomizationError`` exception.
+
+    :param variables: List of variables that were randomized.
+    :param constraints: List of tuples, giving constraints that
+        were applied and the variables they apply to.
     '''
 
-    def __init__(self) -> None:
-        self.failures = []
+    def __init__(
+        self,
+        variables: List['RandVar'],
+        constraints: Iterable[ConstraintAndVars],
+    ) -> None:
+        self.variables = variables
+        self.constraints = constraints
+        self.failures: List[RandomizationFail] = []
 
     def __str__(self) -> str:
-        s = "Randomization failure:"
-        for fail in self.failures:
-            s += "\n" + (str(fail))
+        s = "RandomizationDebugInfo("
+        s += f"variables=["
+        for idx, variable in enumerate(self.variables):
+            s += f"{str(variable)}"
+            if idx < len(self.variables) - 1:
+                s += ", "
+        s += f"], "
+        s += f"constraints={self.constraints}"
+        if len(self.failures) > 0:
+            s += ", failures=["
+            for idx, fail in enumerate(self.failures):
+                s += str(fail)
+                if idx < len(self.failures) - 1:
+                    s += ", "
+            s += "]"
+        s += ")"
         return s
 
-    def __repr__(self) -> str:
-        return self.__str__()
+    def clear(self) -> None:
+        '''
+        Clear current debug information.
+        '''
+        self.failures.clear()
 
-    def add_failure(self, failure: RandomizationFail):
+    def add_failure(
+        self,
+        *,
+        values: Dict[str, Any],
+        constraints: Optional[Iterable[ConstraintAndVars]]=None,
+        attempt: int=None,
+        other_variables: Optional[Dict[str, Any]]=None,
+    ):
         '''
         Adds a failure object, representing a single
         randomization failure along the way.
 
-        :param failure: One ``RandomizationFail`` instance
-            to add to the debug info.
+        :param attempt: Number of attempts up until this failure.
+        :param values: Dictionary where keys are names of variables,
+            values are the failed values.
+        :param constraints: List of tuples, giving constraints that
+            were applied and the variables they apply to. If ``None``
+            supplied, just use existing constraints.
+        :param other_variables: Dictionary of other variable names
+            and possible values at this point in the problem.
         '''
+        if constraints is None:
+            constraints = self.constraints
+        failure = RandomizationFail(
+            attempt=attempt,
+            values=values,
+            constraints=constraints,
+            other_variables=other_variables,
+        )
         self.failures.append(failure)

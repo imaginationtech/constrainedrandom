@@ -2,14 +2,12 @@
 # Copyright (c) 2023 Imagination Technologies Ltd. All Rights Reserved
 
 import constraint
-from enum import auto, Enum
-from functools import partial
 from itertools import product
 from typing import Any, Callable, Iterable, List, Optional
 import random
 
 from .. import utils
-from ..debug import RandomizationDebugInfo, RandomizationFail
+from ..debug import RandomizationDebugInfo
 from ..random import dist
 
 
@@ -160,6 +158,8 @@ class RandVar:
         self.solution_cache: Optional[List[Any]] = None
         self.randomizer: Callable = self.get_randomizer()
         self.disable_naive_list_solver = disable_naive_list_solver
+        self.debug_info = RandomizationDebugInfo(
+            [self], [(c, (self.name,)) for c in self.constraints])
 
     def get_randomizer(self) -> Callable:
         '''
@@ -236,12 +236,13 @@ class RandVar:
         solutions = problem.getSolutions()
         # If we can't get any solutions, it's an intractable problem.
         if len(solutions) == 0:
-            debug_fail = RandomizationFail([self.name],
-                [(c, (self.name,)) for c in constraints])
-            debug_info = RandomizationDebugInfo()
-            debug_info.add_failure(debug_fail)
+            self.debug_info.add_failure(
+                values={self.name: []},
+                constraints=constraints,
+            )
             raise utils.RandomizationError(
-                f"Variable '{self.name}' was unsolvable. Check constraints.", debug_info
+                f"Variable '{self.name}' was unsolvable. Check constraints.",
+                str(self.debug_info),
             )
         if not self.has_impure_constraints and not using_temp_constraints:
             # getSolutions produces a list of dictionaries - index it
@@ -466,20 +467,19 @@ class RandVar:
             return value
         value_valid = False
         iterations = 0
-        if debug:
-            # Collect failures as we go along
-            debug_fail = RandomizationFail([self.name],
-                [(c, (self.name,)) for c in constraints])
         while not value_valid:
             if iterations == self.max_iterations:
-                if not debug:
-                    # Just capture the most recent value
-                    debug_fail = RandomizationFail([self.name],
-                        [(c, (self.name,)) for c in constraints])
-                debug_fail.add_values(iterations, {self.name: value})
-                debug_info = RandomizationDebugInfo()
-                debug_info.add_failure(debug_fail)
-                raise utils.RandomizationError("Too many iterations, can't solve problem", debug_fail)
+                # Always capture final failure info for user debug
+                self.debug_info.add_failure(
+                    attempt=iterations,
+                    values={self.name: value},
+                    constraints=constraints,
+                )
+                raise utils.RandomizationError(
+                    f"After {iterations} attempts, could not satisfy all"
+                    f" constraints for random variable '{self.name}'.",
+                    str(self.debug_info),
+                )
             problem = constraint.Problem()
             problem.addVariable(self.name, (value,))
             for con in constraints:
@@ -488,7 +488,11 @@ class RandVar:
             if not value_valid:
                 if debug:
                     # Capture all failing values as we go
-                    debug_fail.add_values(iterations, {self.name: value})
+                    self.debug_info.add_failure(
+                        attempt=iterations,
+                        values={self.name: value},
+                        constraints=constraints,
+                    )
                 value = self.randomizer()
             iterations += 1
         return value
@@ -520,11 +524,10 @@ class RandVar:
             problem.addConstraint(con, (self.name,))
         solutions = problem.getSolutions()
         if len(solutions) == 0:
-            debug_fail = RandomizationFail([self.name],
-                [(con, (self.name,)) for con in list_constraints])
-            debug_info = RandomizationDebugInfo()
-            debug_info.add_failure(debug_fail)
-            raise utils.RandomizationError("Problem was unsolvable.", debug_info)
+            raise utils.RandomizationError(
+                f"Random variable '{self.name}' was unsolvable.",
+                str(self.debug_info),
+            )
         values = self._get_random().choice(solutions)[self.name]
         return values
 
@@ -534,7 +537,6 @@ class RandVar:
         using_temp_constraints: bool,
         list_constraints: Iterable[utils.Constraint],
         debug: bool,
-        debug_fail: Optional[RandomizationFail],
     ):
         '''
         Naive algorithm to randomize a random list of values, and check
@@ -549,8 +551,6 @@ class RandVar:
         :param list_constraints: The constraints that apply to the entire list.
         :param debug: ``True`` to run in debug mode. Slower, but collects
             all debug info along the way and not just the final failure.
-        :param debug_fail: :class:`RandomizationFail` containing debug info,
-            if in debug mode, else ``None``.
 
         :return: A random list of values for the variable, respecting
             the constraints.
@@ -573,7 +573,11 @@ class RandVar:
             if not values_valid:
                 if debug:
                     # Capture all failing values as we go
-                    debug_fail.add_values(iterations, {self.name: values})
+                    self.debug_info.add_failure(
+                        attempt=iterations,
+                        values={self.name: values},
+                        constraints=constraints,
+                    )
                 iterations += 1
                 values = [self.randomize_once(constraints, using_temp_constraints, debug) \
                     for _ in range(length)]
@@ -585,11 +589,10 @@ class RandVar:
         using_temp_constraints: bool,
         list_constraints: Iterable[utils.Constraint],
         debug : bool,
-        debug_fail: Optional[RandomizationFail],
     ):
         '''
         Algorithm that attempts to ensure forward progress when randomizing
-        a random list. Over-constrains the problem slightly. Aims to converage
+        a random list. Over-constrains the problem slightly. Aims to converge
         quickly while still giving good quality of results.
 
         :param constraints: The constraints that apply to this randomization.
@@ -600,8 +603,6 @@ class RandVar:
         :param list_constraints: The constraints that apply to the entire list.
         :param debug: ``True`` to run in debug mode. Slower, but collects
             all debug info along the way and not just the final failure.
-        :param debug_fail: :class:`RandomizationFail` containing debug info,
-            if in debug mode, else ``None``.
         :return: A random list of values for the variable, respecting
             the constraints.
         :raises RandomizationError: When the problem cannot be solved in fewer than
@@ -619,15 +620,15 @@ class RandVar:
         while not values_valid:
             iterations += 1
             if iterations >= max_iterations:
-                if not debug:
-                    # Create the debug info 'late', only capturing the final
-                    # set of values.
-                    debug_fail = RandomizationFail([self.name],
-                        [(c, (self.name,)) for c in list_constraints])
-                debug_fail.add_values(iterations, {self.name: values})
-                debug_info = RandomizationDebugInfo()
-                debug_info.add_failure(debug_fail)
-                raise utils.RandomizationError("Too many iterations, can't solve problem", debug_info)
+                self.debug_info.add_failure(
+                    attempt=iterations,
+                    values={self.name: values},
+                    constraints=constraints,
+                )
+                raise utils.RandomizationError(
+                    f"After {iterations} attempts, could not satisfy constraints"
+                    f" for random list variable '{self.name}'.",
+                    str(self.debug_info))
             # Keep a subset of the answer, to try to ensure forward progress.
             min_group_size = len(checked) + 1
             for idx in range(min_group_size, length):
@@ -658,7 +659,11 @@ class RandVar:
             values_valid = problem.getSolution() is not None
             if debug and not values_valid:
                 # Capture failure info as we go along
-                debug_fail.add_values(iterations, {self.name: values})
+                self.debug_info.add_failure(
+                    attempt=iterations,
+                    values={self.name: values},
+                    constraints=constraints,
+                )
         return values
 
     def randomize(
@@ -682,6 +687,7 @@ class RandVar:
         # Handle temporary constraints. Start with copy of existing constraints,
         # adding any temporary ones in.
         constraints = list(self.constraints)
+        self.debug_info.clear()
         using_temp_constraints = temp_constraints is not None and len(temp_constraints) > 0
         length = self.get_length()
         if length is None:
@@ -709,17 +715,11 @@ class RandVar:
                 return self.randomize_list_csp(constraints, list_constraints)
             else:
                 # Otherwise, just randomize and check.
-                if debug:
-                    # Collect failures as we go along
-                    debug_fail = RandomizationFail([self.name],
-                        [(c, (self.name,)) for c in list_constraints])
-                else:
-                    debug_fail = None
                 # Start by purely randomizing and checking, unless
                 # naive mode disabled.
                 if not self.disable_naive_list_solver:
                     values = self.randomize_list_naive(constraints, \
-                        using_temp_constraints, list_constraints, debug, debug_fail)
+                        using_temp_constraints, list_constraints, debug)
                     if values is not None:
                         return values
                 # If the above fails, use a slightly smarter algorithm,
@@ -727,4 +727,31 @@ class RandVar:
                 # might also restrict value selection.
                 # No fallback if this fails.
                 return self.randomize_list_subset(constraints, \
-                    using_temp_constraints, list_constraints, debug, debug_fail)
+                    using_temp_constraints, list_constraints, debug)
+
+    def __str__(self) -> str:
+        '''
+        Override builtin to output RandVar as a string.
+
+        :return: String representation of RandVar.
+        '''
+        s = f"RandVar(name='{self.name}'"
+        # Determine base domain
+        if self.fn is not None:
+            s += f", fn={self.fn}"
+        elif self.bits is not None:
+            s += f", bits={self.bits}"
+        elif self.domain is not None:
+            s += f", domain={self.domain}"
+        # Random length
+        if self.length is not None:
+            s += f", length={self.length}"
+        elif self.rand_length is not None:
+            s += f", rand_length='{self.rand_length}'"
+        # Constraints
+        if len(self.constraints) > 0:
+            s += f", constraints={self.constraints}"
+        if len(self.list_constraints) > 0:
+            s += f", list_constraints={self.list_constraints}"
+        s += ")"
+        return s
