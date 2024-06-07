@@ -92,14 +92,28 @@ pure_global_lambda_args = lambda x=global_immutable_var : x
 
 # Local lambdas
 def make_impure_local_lambdas():
+    local_immutable_var = 42
+    local_mutable_var = [24]
     impure_local_lambda = lambda : global_immutable_var
     impure_local_lambda_args = lambda x=global_mutable_var : x
-    return (impure_local_lambda, impure_local_lambda_args)
+    impure_local_lambda_local_immutable_var = lambda : local_immutable_var
+    impure_local_lambda_local_mutable_var = lambda : local_mutable_var
+    impure_local_lambda_local_mutable_var_args = lambda x=local_mutable_var : x
+    return (
+        impure_local_lambda,
+        impure_local_lambda_args,
+        impure_local_lambda_local_immutable_var,
+        impure_local_lambda_local_mutable_var,
+        impure_local_lambda_local_mutable_var_args,
+        )
 
 def make_pure_local_lambdas():
+    local_immutable_var = 20
     pure_local_lambda = lambda : 2
     pure_local_lambda_args = lambda x=global_immutable_var : x
-    return (pure_local_lambda, pure_local_lambda_args)
+    # This gets optimized so the variable isn't bound
+    pure_local_lambda_local_immutable_var_args = lambda x=local_immutable_var : x
+    return (pure_local_lambda, pure_local_lambda_args, pure_local_lambda_local_immutable_var_args)
 
 impure_local_lambdas = make_impure_local_lambdas()
 pure_local_lambdas = make_pure_local_lambdas()
