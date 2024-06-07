@@ -25,6 +25,10 @@ $ make html
 
 The index page is at `docs/_build/html/index.html` - you can open this in a web browser.
 
+## Tests and benchmarks
+
+Please see `tests/README.md` and `benchmarks/README.md` for more information.
+
 ## Releases/versioning
 
 Releases are created using tags from the repository and can be found on [PyPI](https://pypi.org/project/constrainedrandom/).
