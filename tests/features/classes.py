@@ -5,6 +5,8 @@
 Test use of classes and class methods in constraints.
 '''
 
+import unittest
+
 from constrainedrandom import RandObj
 from .. import testutils
 
@@ -20,7 +22,7 @@ class Foo(RandObj):
         super().__init__(*args)
         self._max = _max
         self._min = _min
-        self.add_rand_var('value', domain=range(20))
+        self.add_rand_var('value', domain=range(1000))
         self.add_constraint(self.value_c, ('value'))
 
     def value_c(self, value):
@@ -33,7 +35,7 @@ class Bar(Foo):
     '''
 
     def value_c(self, value):
-        return 10 <= value < 20
+        return 11 <= value < 20
 
 
 class MemberVars(testutils.RandObjTestBase):
@@ -60,14 +62,14 @@ class MemberVarsChanged(testutils.RandObjTestBase):
 
     def get_randobj(self, *args):
         r = Foo(0, 10, *args)
-        r._min = 10
+        r._min = 11
         r._max = 19
         return r
 
     def check(self, results):
         for result in results:
             value = result['value']
-            self.assertGreaterEqual(value, 10)
+            self.assertGreaterEqual(value, 11)
             self.assertLessEqual(value, 19)
 
 
@@ -83,5 +85,32 @@ class ChildClassConstraint(testutils.RandObjTestBase):
     def check(self, results):
         for result in results:
             value = result['value']
-            self.assertGreaterEqual(value, 10)
+            self.assertGreaterEqual(value, 11)
             self.assertLessEqual(value, 19)
+
+
+class MemberVarsChangedRand(unittest.TestCase):
+    '''
+    Test randomizing a randobj, then
+    changing member variables used in constraints,
+    observing the effect of the changes.
+
+    Can't use base class for this one, as
+    we won't check determinism.
+    '''
+
+    def test_change_vars(self):
+        r = Foo(0, 10)
+        results = []
+        for _ in range(10):
+            r.randomize()
+            results.append(r.get_results())
+        MemberVars.check(self, results)
+        r._min = 11
+        r._max = 19
+        results = []
+        for _ in range(10):
+            r.randomize()
+            results.append(r.get_results())
+        MemberVarsChanged.check(self, results)
+        return r
