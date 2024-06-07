@@ -5,6 +5,14 @@ import random
 
 from constrainedrandom import RandObj
 
+
+def read_model_for_src0_value():
+    '''
+    Pretend getter for src0 current value.
+    '''
+    return 0xfffffbcd
+
+
 class ldInstr(RandObj):
     '''
     A made-up load instruction has the following fields (starting at LSB):
@@ -25,24 +33,22 @@ class ldInstr(RandObj):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
         self.add_rand_var('src0', bits=5, order=0)
-        def read_model_for_src0_value():
-            # Pretend getter for src0 current value
-            return 0xfffffbcd
         self.add_rand_var('src0_value', fn=read_model_for_src0_value, order=0)
         self.add_rand_var('wb', bits=1, order=0)
         self.add_rand_var('dst0', bits=5, order=1)
         self.add_rand_var('imm0', bits=11, order=2)
-        def wb_dst_src(wb, dst0, src0):
-            if wb:
-                return dst0 != src0
-            return True
-        self.add_constraint(wb_dst_src, ('wb', 'dst0', 'src0'))
-        def sum_src0_imm0(src0_value, imm0):
-            address = src0_value + imm0
-            return (address & 3 == 0) and (address < 0xffffffff)
-        self.add_constraint(sum_src0_imm0, ('src0_value', 'imm0'))
+        self.add_constraint(self.wb_dst_src, ('wb', 'dst0', 'src0'))
+        self.add_constraint(self.sum_src0_imm0, ('src0_value', 'imm0'))
+
+    def wb_dst_src(self, wb, dst0, src0):
+        if wb:
+            return dst0 != src0
+        return True
+
+    def sum_src0_imm0(self, src0_value, imm0):
+        address = src0_value + imm0
+        return (address & 3 == 0) and (address < 0xffffffff)
 
     def post_randomize(self):
         self.opcode = self.get_opcode()
