@@ -6,6 +6,18 @@ Use this package to create SystemVerilog-style "declarative" randomizable object
 
 This is achieved by providing wrappers around the Python [`random`](https://docs.python.org/3/library/random.html) and [`constraint`](https://pypi.org/project/python-constraint/) packages, and aims to be as efficient as possible in a language like Python.
 
+## This project has moved!
+
+Effective 1 November 2024, Will Keen (the author of this repository) is no longer employed by Imagination Technologies.
+
+Therefore, to enable the original author to continue maintaining it, the repository has been forked:
+https://github.com/will-keen/constrainedrandom
+
+The license of the project remains the MIT license. Imagination Technologies' right to be recognized as the copyright holder has been maintained.
+
+Both the PyPi page and the Read The Docs page have been changed to point to the new project location. All releases from 1.2.2 onwards will be released from the fork.
+
+Releases up to and including 1.2.1 will remain here for posterity. The author will do all future development work on the fork.
 
 ## Installation
 
